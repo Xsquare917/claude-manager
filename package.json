@@ -1,0 +1,94 @@
+{
+  "name": "claude-manager",
+  "version": "1.0.0",
+  "description": "Multi-project Claude Code session manager with AI summary",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsx watch src/server.ts",
+    "dev:client": "cd client && npm run dev",
+    "build": "tsc && cd client && npm run build",
+    "build:electron": "npm run build && tsc -p tsconfig.electron.json",
+    "start": "node dist/server.js",
+    "electron:dev": "npm run build:electron && electron .",
+    "pack": "npm run build:electron && electron-builder --dir",
+    "dist": "npm run build:electron && electron-builder",
+    "dist:mac": "npm run build:electron && electron-builder --mac",
+    "dist:win": "npm run build:electron && electron-builder --win",
+    "dist:all": "npm run build:electron && electron-builder --mac --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "claude",
+    "ai",
+    "manager",
+    "terminal"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "express": "^4.18.2",
+    "node-pty": "^1.2.0-beta.8",
+    "socket.io": "^4.7.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.7",
+    "concurrently": "^8.2.2",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.2"
+  },
+  "build": {
+    "appId": "com.claude.manager",
+    "productName": "Claude Manager",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "client/dist/**/*",
+      "splash.html",
+      "love.png",
+      "node_modules/**/*",
+      "!node_modules/.cache"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ]
+    }
+  }
+}
