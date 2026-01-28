@@ -42,7 +42,7 @@
 Download the latest release for your platform from the [Releases](https://github.com/Xsquare917/claude-manager/releases) page:
 
 - **macOS**: `Claude-Manager-x.x.x.dmg` (Intel & Apple Silicon)
-- **Windows**: `Claude-Manager-Setup-x.x.x.exe`
+- **Windows**: `Claude-Manager-Setup-x.x.x.exe`（Pending Update）
 
 ### Build from Source
 
