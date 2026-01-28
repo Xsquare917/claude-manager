@@ -42,7 +42,7 @@
 从 [Releases](https://github.com/Xsquare917/claude-manager/releases) 页面下载适合您平台的最新版本：
 
 - **macOS**: `Claude-Manager-x.x.x.dmg`（支持 Intel 和 Apple Silicon）
-- **Windows**: `Claude-Manager-Setup-x.x.x.exe`
+- **Windows**: `Claude-Manager-Setup-x.x.x.exe`（等待更新）
 
 ### 从源码构建
 
