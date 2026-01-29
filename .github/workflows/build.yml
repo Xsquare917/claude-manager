@@ -48,10 +48,14 @@ jobs:
       - name: Pack for macOS
         if: matrix.platform == 'mac'
         run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pack for Windows
         if: matrix.platform == 'win'
         run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
