@@ -9,6 +9,12 @@ import AddProjectModal from './components/AddProjectModal';
 import SettingsModal, { loadSettings, saveSettings } from './components/SettingsModal';
 import type { AppSettings } from './components/SettingsModal';
 import SetupGuide from './components/SetupGuide';
+import UpdateModal from './components/UpdateModal';
+import {
+  scheduleUpdateCheck,
+  getPendingUpdate,
+  type UpdateInfo,
+} from './services/versionCheck';
 import './App.css';
 
 function App() {
@@ -21,6 +27,9 @@ function App() {
   // 过渡动画状态
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [maskPosition, setMaskPosition] = useState({ x: 50, y: 50 });
+  // 版本更新状态
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   // 用 ref 跟踪状态，避免闭包问题
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionsRef = useRef<Session[]>([]);
@@ -33,7 +42,7 @@ function App() {
   useEffect(() => {
     // 使用版本号判断是否首次启动该版本
     const launchedVersion = localStorage.getItem('cm-setup-version');
-    const isFirstLaunch = launchedVersion !== '1.0.0';
+    const isFirstLaunch = launchedVersion !== '1.2.0';
 
     // 首次启动必须显示引导页
     if (isFirstLaunch) {
@@ -59,8 +68,45 @@ function App() {
 
   // 应用主题
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', settings.theme);
+    const applyTheme = (theme: 'dark' | 'light' | 'system') => {
+      if (theme === 'system') {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+      } else {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+    };
+
+    applyTheme(settings.theme);
+
+    // 监听系统主题变化
+    if (settings.theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = (e: MediaQueryListEvent) => {
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      };
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
   }, [settings.theme]);
+
+  // 版本更新检测
+  useEffect(() => {
+    // 检查是否有待显示的更新（上次检测到但未显示）
+    const pending = getPendingUpdate();
+    if (pending) {
+      setUpdateInfo(pending);
+      setShowUpdateModal(true);
+    }
+
+    // 定时检查更新（每24小时）
+    scheduleUpdateCheck().then(info => {
+      if (info?.hasUpdate) {
+        setUpdateInfo(info);
+        // 不立即弹窗，等下次启动时弹出
+      }
+    });
+  }, []);
 
   const handleSaveSettings = (newSettings: AppSettings) => {
     setSettings(newSettings);
@@ -222,8 +268,11 @@ function App() {
             onDeleteProject={(ids) => ids.forEach(id => socketService.deleteSession(id))}
             onRefreshAllSummaries={(ids) => ids.forEach(id => socketService.requestSummary(id))}
             onOpenSettings={() => setShowSettings(true)}
+            hasUpdate={updateInfo?.hasUpdate}
+            onShowUpdate={() => setShowUpdateModal(true)}
           />
           <main className="main-content">
+            <div className="main-titlebar" />
             {activeSession ? (
               <>
                 <div className="terminal-wrapper">
@@ -248,6 +297,13 @@ function App() {
             const session = await socketService.createSession(path);
             if (session) {
               setActiveSessionId(session.id);
+              // 如果有指令模板，自动填入（不执行）
+              const template = settingsRef.current.promptTemplate;
+              if (template) {
+                setTimeout(() => {
+                  socketService.sendInput(session.id, template);
+                }, 500);
+              }
             } else {
               alert('创建会话失败，请检查后端日志');
             }
@@ -260,6 +316,12 @@ function App() {
           settings={settings}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
+        />
+      )}
+      {showUpdateModal && updateInfo && (
+        <UpdateModal
+          updateInfo={updateInfo}
+          onClose={() => setShowUpdateModal(false)}
         />
       )}
       {/* 过渡遮罩层 - 在主界面之上 */}

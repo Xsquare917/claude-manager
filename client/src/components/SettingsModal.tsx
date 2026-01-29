@@ -1,12 +1,14 @@
 import { useState } from 'react';
+import { getCurrentVersion } from '../services/versionCheck';
 
 export interface AppSettings {
-  theme: 'dark' | 'light';
+  theme: 'dark' | 'light' | 'system';
   shortcuts: {
     addProject: string;
     prevSession: string;
     nextSession: string;
   };
+  promptTemplate: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -16,6 +18,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     prevSession: '⌘+↑',
     nextSession: '⌘+↓',
   },
+  promptTemplate: '',
 };
 
 interface SettingsModalProps {
@@ -42,6 +45,12 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   const [theme, setTheme] = useState(settings.theme);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState(settings.shortcuts);
+  const [promptTemplate, setPromptTemplate] = useState(settings.promptTemplate || '');
+
+  const handleThemeChange = (newTheme: 'dark' | 'light' | 'system') => {
+    setTheme(newTheme);
+    onSave({ ...settings, theme: newTheme, shortcuts, promptTemplate });
+  };
 
   const handleKeyCapture = (e: React.KeyboardEvent, key: keyof typeof shortcuts) => {
     e.preventDefault();
@@ -63,7 +72,7 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   };
 
   const handleSave = () => {
-    onSave({ theme, shortcuts });
+    onSave({ theme, shortcuts, promptTemplate });
     onClose();
   };
 
@@ -78,25 +87,29 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
         <div className="settings-content">
           <div className="settings-section">
             <h3>主题</h3>
-            <div className="theme-options">
-              <label className={`theme-option ${theme === 'dark' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  checked={theme === 'dark'}
-                  onChange={() => setTheme('dark')}
-                />
+            <div className="theme-toggle-wrapper">
+              <span className={`theme-label ${theme === 'dark' ? 'active' : ''}`}>
                 <span className="theme-icon">🌙</span>
-                <span>深色</span>
-              </label>
-              <label className={`theme-option ${theme === 'light' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  checked={theme === 'light'}
-                  onChange={() => setTheme('light')}
-                />
+                深色
+              </span>
+              <button
+                className={`theme-toggle ${theme === 'light' ? 'light' : ''} ${theme === 'system' ? 'system' : ''}`}
+                onClick={() => handleThemeChange(theme === 'light' ? 'dark' : 'light')}
+                aria-label="切换主题"
+              >
+                <span className="toggle-slider" />
+              </button>
+              <span className={`theme-label ${theme === 'light' ? 'active' : ''}`}>
                 <span className="theme-icon">☀️</span>
-                <span>浅色</span>
-              </label>
+                浅色
+              </span>
+              <button
+                className={`theme-option system ${theme === 'system' ? 'active' : ''}`}
+                onClick={() => handleThemeChange('system')}
+              >
+                <span className="theme-icon">💻</span>
+                跟随系统
+              </button>
             </div>
           </div>
 
@@ -119,6 +132,26 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h3>常用指令模板</h3>
+            <p className="settings-hint">创建新会话时自动填入此内容（不会自动执行）</p>
+            <textarea
+              className="prompt-template-input"
+              value={promptTemplate}
+              onChange={e => setPromptTemplate(e.target.value)}
+              placeholder="输入常用的指令模板，例如：请帮我分析这个项目的代码结构..."
+              rows={4}
+            />
+          </div>
+
+          <div className="settings-section">
+            <h3>关于</h3>
+            <div className="about-info">
+              <span className="about-label">当前版本</span>
+              <span className="about-value">v{getCurrentVersion()}</span>
             </div>
           </div>
         </div>

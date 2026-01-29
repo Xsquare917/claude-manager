@@ -1,7 +1,7 @@
 # Claude Manager
 
 <p align="center">
-  <img src="love.png" alt="Claude Manager Logo" width="128" height="128">
+  <img src="logo.png" alt="Claude Manager Logo" width="128" height="128">
 </p>
 
 <p align="center">
@@ -30,6 +30,10 @@
 - **AI Status Summary**
   - **Current Task** (Auto-refresh): Real-time detection of what Claude is doing
   - **Conversation Summary** (Manual): Generate summaries of current session content
+- **Auto Update Check** - Automatically checks for new versions every 24 hours
+- **Prompt Template** - Set default prompts that auto-fill when creating new sessions
+- **Theme Switching** - Dark/Light theme with smooth toggle animation
+- **Smart Scrolling** - Terminal only auto-scrolls when you're at the bottom
 
 ## Screenshots
 
@@ -68,6 +72,13 @@ npm run dist:all    # For all platforms
 3. Click on a project to create a new Claude Code session
 4. Interact with Claude Code in the integrated terminal
 5. View real-time task status and generate conversation summaries
+
+### Settings
+
+- **Theme**: Toggle between dark and light mode
+- **Shortcuts**: Customize keyboard shortcuts
+- **Prompt Template**: Set a default prompt for new sessions
+- **Version**: View current version and check for updates
 
 ## Development
 

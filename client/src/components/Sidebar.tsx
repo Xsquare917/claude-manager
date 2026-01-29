@@ -10,6 +10,8 @@ interface SidebarProps {
   onDeleteProject: (sessionIds: string[]) => void;
   onRefreshAllSummaries: (sessionIds: string[]) => void;
   onOpenSettings: () => void;
+  hasUpdate?: boolean;
+  onShowUpdate?: () => void;
 }
 
 // 按项目分组会话，未读的排在前面
@@ -63,10 +65,16 @@ export default function Sidebar({
   onDeleteProject,
   onRefreshAllSummaries,
   onOpenSettings,
+  hasUpdate,
+  onShowUpdate,
 }: SidebarProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const grouped = groupByProject(sessions);
   const sortedGroups = sortedGroupEntries(grouped);
+
+  // 获取当前活动会话所属的项目路径
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const activeProjectPath = activeSession?.projectPath || null;
 
   const handleRefreshAll = () => {
     if (sessions.length === 0) return;
@@ -79,7 +87,13 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       {/* macOS 窗口控制按钮预留区域 */}
-      <div className="macos-titlebar" />
+      <div className="macos-titlebar">
+        {hasUpdate && (
+          <button className="update-badge" onClick={onShowUpdate}>
+            新版本
+          </button>
+        )}
+      </div>
       <div className="sidebar-header">
         <div className="sidebar-title">
           <h1>Claude Manager</h1>
@@ -96,42 +110,45 @@ export default function Sidebar({
       </div>
 
       <div className="project-list">
-        {sortedGroups.map(([projectPath, projectSessions]) => (
-          <div key={projectPath} className="project-group">
-            <div className="project-header">
-              <span className="project-name">{projectSessions[0].projectName}</span>
-              <button
-                className="btn-delete-project"
-                onClick={() => onDeleteProject(projectSessions.map(s => s.id))}
-                title="删除整个项目"
-              >
-                ×
-              </button>
-            </div>
-            <div className="session-list">
-              {projectSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`session-item ${session.id === activeSessionId ? 'active' : ''}`}
-                  onClick={() => onSelectSession(session.id)}
+        {sortedGroups.map(([projectPath, projectSessions]) => {
+          const isActiveProject = projectPath === activeProjectPath;
+          return (
+            <div key={projectPath} className={`project-group ${isActiveProject ? 'active' : ''}`}>
+              <div className="project-header">
+                <span className="project-name">{projectSessions[0].projectName}</span>
+                <button
+                  className="btn-delete-project"
+                  onClick={() => onDeleteProject(projectSessions.map(s => s.id))}
+                  title="删除整个项目"
                 >
-                  <span className="status-icon">{getStatusIcon(session.status)}</span>
-                  <span className="session-name">{session.title || '新会话'}</span>
-                  {session.unread && <span className="unread-dot" />}
-                  <button
-                    className="btn-delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteSession(session.id);
-                    }}
+                  ×
+                </button>
+              </div>
+              <div className="session-list">
+                {projectSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`session-item ${session.id === activeSessionId ? 'active' : ''}`}
+                    onClick={() => onSelectSession(session.id)}
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
+                    <span className="status-icon">{getStatusIcon(session.status)}</span>
+                    <span className="session-name">{session.title || '新会话'}</span>
+                    {session.unread && <span className="unread-dot" />}
+                    <button
+                      className="btn-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteSession(session.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="sidebar-footer">

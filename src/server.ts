@@ -158,6 +158,46 @@ function createApp() {
     }
   );
 
+  // 摘要请求队列（避免并发限流）
+  const summaryQueue: Array<{ sessionId: string; resolve: () => void }> = [];
+  let isProcessingSummary = false;
+
+  async function processSummaryQueue() {
+    if (isProcessingSummary || summaryQueue.length === 0) return;
+
+    isProcessingSummary = true;
+    const { sessionId, resolve } = summaryQueue.shift()!;
+
+    try {
+      const buffer = sessionManager.getSessionBuffer(sessionId);
+      if (buffer.length === 0) {
+        io.emit('summary:updated', { sessionId, summary: '会话内容为空', title: '新会话' });
+      } else {
+        const { summary, title } = await generateSummary(buffer);
+        sessionManager.updateSummary(sessionId, summary, title);
+        io.emit('summary:updated', { sessionId, summary, title });
+      }
+    } catch (error) {
+      console.error('Summary generation error:', error);
+      io.emit('summary:updated', { sessionId, summary: '概括生成失败', title: '新会话' });
+    }
+
+    resolve();
+    isProcessingSummary = false;
+
+    // 处理下一个请求（延迟 500ms 避免限流）
+    if (summaryQueue.length > 0) {
+      setTimeout(processSummaryQueue, 500);
+    }
+  }
+
+  function queueSummaryRequest(sessionId: string): Promise<void> {
+    return new Promise((resolve) => {
+      summaryQueue.push({ sessionId, resolve });
+      processSummaryQueue();
+    });
+  }
+
   // WebSocket handlers
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -202,12 +242,9 @@ function createApp() {
       callback(buffer.join(''));
     });
 
-    // Request AI summary
-    socket.on('session:requestSummary', async (sessionId) => {
-      const buffer = sessionManager.getSessionBuffer(sessionId);
-      const { summary, title } = await generateSummary(buffer);
-      sessionManager.updateSummary(sessionId, summary, title);
-      io.emit('summary:updated', { sessionId, summary, title });
+    // Request AI summary (使用队列避免并发限流)
+    socket.on('session:requestSummary', (sessionId) => {
+      queueSummaryRequest(sessionId);
     });
 
     socket.on('disconnect', () => {

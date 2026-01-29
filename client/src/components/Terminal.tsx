@@ -9,6 +9,18 @@ interface TerminalProps {
   session: Session;
 }
 
+const darkTheme = {
+  background: '#1e1e1e',
+  foreground: '#d4d4d4',
+  cursor: '#d4d4d4',
+};
+
+const lightTheme = {
+  background: '#ffffff',
+  foreground: '#1a1a1a',
+  cursor: '#1a1a1a',
+};
+
 export default function Terminal({ session }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -21,6 +33,8 @@ export default function Terminal({ session }: TerminalProps) {
   const initializedRef = useRef<boolean>(false);
   // 缓存初始化期间收到的输出
   const pendingOutputRef = useRef<string[]>([]);
+  // 标记用户是否在底部（用于智能滚动）
+  const isAtBottomRef = useRef<boolean>(true);
 
   // 监听状态变化
   useEffect(() => {
@@ -44,15 +58,16 @@ export default function Terminal({ session }: TerminalProps) {
     initializedRef.current = false;
     pendingOutputRef.current = [];
 
+    const getTheme = () => {
+      const theme = document.documentElement.getAttribute('data-theme');
+      return theme === 'light' ? lightTheme : darkTheme;
+    };
+
     const xterm = new XTerm({
       cursorBlink: true,
       fontSize: 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#d4d4d4',
-      },
+      theme: getTheme(),
     });
 
     const fitAddon = new FitAddon();
@@ -102,8 +117,8 @@ export default function Terminal({ session }: TerminalProps) {
       }
 
       xtermRef.current.write(output.data);
-      if (output.data.includes('>') || output.data.includes('$') ||
-          output.data.includes('?') || output.data.includes('[Y/n]')) {
+      // 只有当用户本来就在底部时才自动滚动
+      if (isAtBottomRef.current) {
         xtermRef.current.scrollToBottom();
       }
     };
@@ -140,6 +155,9 @@ export default function Terminal({ session }: TerminalProps) {
         // 写入缓存的输出（只写入历史之后的新内容）
         // 由于历史已经包含了之前的输出，这里清空缓存即可
         pendingOutputRef.current = [];
+
+        // 聚焦终端
+        xtermRef.current.focus();
       });
     });
 
@@ -147,7 +165,30 @@ export default function Terminal({ session }: TerminalProps) {
     const dataDisposable = xterm.onData((data) => {
       if (mountedRef.current) {
         socketService.sendInput(currentSessionId, data);
+        // 用户输入后滚动到底部
+        isAtBottomRef.current = true;
+        xtermRef.current?.scrollToBottom();
       }
+    });
+
+    // 监听滚动事件，判断用户是否在底部
+    const scrollDisposable = xterm.onScroll(() => {
+      if (!xtermRef.current) return;
+      const buffer = xtermRef.current.buffer.active;
+      const viewportY = buffer.viewportY;
+      const baseY = buffer.baseY;
+      // 如果 viewportY 等于 baseY，说明在底部
+      isAtBottomRef.current = viewportY >= baseY;
+    });
+
+    // 监听主题变化
+    const themeObserver = new MutationObserver(() => {
+      if (!xtermRef.current) return;
+      xtermRef.current.options.theme = getTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
     });
 
     // 窗口 resize
@@ -161,14 +202,20 @@ export default function Terminal({ session }: TerminalProps) {
       initializedRef.current = false;
       pendingOutputRef.current = [];
       resizeObserver.disconnect();
+      themeObserver.disconnect();
       window.removeEventListener('resize', handleSizeChange);
       socketService.off('session:output', handleOutput);
       dataDisposable.dispose();
+      scrollDisposable.dispose();
       xtermRef.current = null;
       fitAddonRef.current = null;
       xterm.dispose();
     };
   }, [session.id]);
 
-  return <div ref={terminalRef} className="terminal-container" />;
+  const handleContainerClick = () => {
+    xtermRef.current?.focus();
+  };
+
+  return <div ref={terminalRef} className="terminal-container" onClick={handleContainerClick} />;
 }
