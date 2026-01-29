@@ -47,11 +47,11 @@ jobs:
 
       - name: Pack for macOS
         if: matrix.platform == 'mac'
-        run: npm run pack:mac
+        run: npm run dist:mac
 
       - name: Pack for Windows
         if: matrix.platform == 'win'
-        run: npm run pack:win
+        run: npm run dist:win
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
