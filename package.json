@@ -1,6 +1,6 @@
 {
   "name": "claude-manager",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Multi-project Claude Code session manager with AI summary",
   "main": "dist/electron/main.js",
   "scripts": {

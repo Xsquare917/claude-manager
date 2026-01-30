@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { startServer } from '../src/server.js';
+import { startServer, cleanupAllSessions } from '../src/server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -103,4 +103,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// 应用退出前清理所有会话
+app.on('before-quit', () => {
+  console.log('App quitting, cleaning up all sessions...');
+  cleanupAllSessions();
 });

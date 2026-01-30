@@ -45,6 +45,9 @@ function getShellEnv(): Record<string, string> {
 
 const shellEnv = getShellEnv();
 
+// 全局 sessionManager 引用，用于退出时清理
+let globalSessionManager: SessionManager | null = null;
+
 function createApp() {
   const app = express();
   const httpServer = createServer(app);
@@ -158,15 +161,21 @@ function createApp() {
     }
   );
 
+  // 保存全局引用
+  globalSessionManager = sessionManager;
+
   // 摘要请求队列（避免并发限流）
-  const summaryQueue: Array<{ sessionId: string; resolve: () => void }> = [];
+  const summaryQueue: Array<{ sessionId: string; resolve: () => void; retries: number }> = [];
   let isProcessingSummary = false;
+  const MAX_RETRIES = 2;
+  const QUEUE_DELAY = 1500; // 增加到 1.5 秒，避免限流
 
   async function processSummaryQueue() {
     if (isProcessingSummary || summaryQueue.length === 0) return;
 
     isProcessingSummary = true;
-    const { sessionId, resolve } = summaryQueue.shift()!;
+    const item = summaryQueue.shift()!;
+    const { sessionId, resolve, retries } = item;
 
     try {
       const buffer = sessionManager.getSessionBuffer(sessionId);
@@ -174,26 +183,33 @@ function createApp() {
         io.emit('summary:updated', { sessionId, summary: '会话内容为空', title: '新会话' });
       } else {
         const { summary, title } = await generateSummary(buffer);
-        sessionManager.updateSummary(sessionId, summary, title);
-        io.emit('summary:updated', { sessionId, summary, title });
+        // 检查是否是限流错误，需要重试
+        if (summary === 'API 限流，请稍后重试' && retries < MAX_RETRIES) {
+          console.log(`[Summary] Rate limited, will retry (${retries + 1}/${MAX_RETRIES})`);
+          summaryQueue.push({ sessionId, resolve, retries: retries + 1 });
+        } else {
+          sessionManager.updateSummary(sessionId, summary, title);
+          io.emit('summary:updated', { sessionId, summary, title });
+          resolve();
+        }
       }
     } catch (error) {
       console.error('Summary generation error:', error);
       io.emit('summary:updated', { sessionId, summary: '概括生成失败', title: '新会话' });
+      resolve();
     }
 
-    resolve();
     isProcessingSummary = false;
 
-    // 处理下一个请求（延迟 500ms 避免限流）
+    // 处理下一个请求（延迟避免限流）
     if (summaryQueue.length > 0) {
-      setTimeout(processSummaryQueue, 500);
+      setTimeout(processSummaryQueue, QUEUE_DELAY);
     }
   }
 
   function queueSummaryRequest(sessionId: string): Promise<void> {
     return new Promise((resolve) => {
-      summaryQueue.push({ sessionId, resolve });
+      summaryQueue.push({ sessionId, resolve, retries: 0 });
       processSummaryQueue();
     });
   }
@@ -262,10 +278,7 @@ export function startServer(port?: number): Promise<number> {
     const targetPort = port || Number(process.env.PORT) || 3456;
 
     const tryListen = (p: number) => {
-      httpServer.listen(p, () => {
-        console.log(`Claude Manager server running at http://localhost:${p}`);
-        resolve(p);
-      }).on('error', (err: NodeJS.ErrnoException) => {
+      httpServer.once('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE' && p < targetPort + 10) {
           // 端口被占用，尝试下一个
           tryListen(p + 1);
@@ -273,10 +286,21 @@ export function startServer(port?: number): Promise<number> {
           reject(err);
         }
       });
+      httpServer.listen(p, () => {
+        console.log(`Claude Manager server running at http://localhost:${p}`);
+        resolve(p);
+      });
     };
 
     tryListen(targetPort);
   });
+}
+
+// 导出清理函数供 Electron 退出时调用
+export function cleanupAllSessions(): void {
+  if (globalSessionManager) {
+    globalSessionManager.destroyAll();
+  }
 }
 
 // 直接运行时启动服务器

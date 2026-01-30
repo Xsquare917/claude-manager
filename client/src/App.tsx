@@ -5,7 +5,6 @@ import Sidebar from './components/Sidebar';
 import Terminal from './components/Terminal';
 import StatusPanel from './components/StatusPanel';
 import FloatingStatus from './components/FloatingStatus';
-import AddProjectModal from './components/AddProjectModal';
 import SettingsModal, { loadSettings, saveSettings } from './components/SettingsModal';
 import type { AppSettings } from './components/SettingsModal';
 import SetupGuide from './components/SetupGuide';
@@ -21,7 +20,6 @@ function App() {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [showAddProject, setShowAddProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   // 过渡动画状态
@@ -30,6 +28,8 @@ function App() {
   // 版本更新状态
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  // 需要填入初始模板的会话ID
+  const [pendingTemplateSessionId, setPendingTemplateSessionId] = useState<string | null>(null);
   // 用 ref 跟踪状态，避免闭包问题
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionsRef = useRef<Session[]>([]);
@@ -42,7 +42,7 @@ function App() {
   useEffect(() => {
     // 使用版本号判断是否首次启动该版本
     const launchedVersion = localStorage.getItem('cm-setup-version');
-    const isFirstLaunch = launchedVersion !== '1.2.0';
+    const isFirstLaunch = launchedVersion !== '1.2.1';
 
     // 首次启动必须显示引导页
     if (isFirstLaunch) {
@@ -113,6 +113,29 @@ function App() {
     saveSettings(newSettings);
   };
 
+  // 直接打开目录选择器并添加项目
+  const handleAddProject = useCallback(async () => {
+    try {
+      const res = await fetch('/api/pick-folder');
+      const data = await res.json();
+      if (data.path) {
+        const session = await socketService.createSession(data.path);
+        if (session) {
+          setActiveSessionId(session.id);
+          // 如果有指令模板，标记该会话需要填入模板
+          const template = settingsRef.current.promptTemplate;
+          if (template) {
+            setPendingTemplateSessionId(session.id);
+          }
+        } else {
+          alert('创建会话失败，请检查后端日志');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to add project:', error);
+    }
+  }, []);
+
   // 选择会话时清除未读标记
   const handleSelectSession = useCallback((id: string) => {
     setActiveSessionId(id);
@@ -153,7 +176,7 @@ function App() {
       // 添加新项目
       if (matchShortcut(e, shortcuts.addProject)) {
         e.preventDefault();
-        setShowAddProject(true);
+        handleAddProject();
         return;
       }
 
@@ -263,7 +286,7 @@ function App() {
             sessions={sessions}
             activeSessionId={activeSessionId}
             onSelectSession={handleSelectSession}
-            onAddProject={() => setShowAddProject(true)}
+            onAddProject={handleAddProject}
             onDeleteSession={(id) => socketService.deleteSession(id)}
             onDeleteProject={(ids) => ids.forEach(id => socketService.deleteSession(id))}
             onRefreshAllSummaries={(ids) => ids.forEach(id => socketService.requestSummary(id))}
@@ -277,7 +300,12 @@ function App() {
               <>
                 <div className="terminal-wrapper">
                   <FloatingStatus session={activeSession} />
-                  <Terminal key={activeSession.id} session={activeSession} />
+                  <Terminal
+                    key={activeSession.id}
+                    session={activeSession}
+                    initialInput={pendingTemplateSessionId === activeSession.id ? settings.promptTemplate : undefined}
+                    onInitialInputSent={() => setPendingTemplateSessionId(null)}
+                  />
                 </div>
                 <StatusPanel session={activeSession} />
               </>
@@ -289,27 +317,6 @@ function App() {
             )}
           </main>
         </>
-      )}
-      {showAddProject && (
-        <AddProjectModal
-          onClose={() => setShowAddProject(false)}
-          onAdd={async (path) => {
-            const session = await socketService.createSession(path);
-            if (session) {
-              setActiveSessionId(session.id);
-              // 如果有指令模板，自动填入（不执行）
-              const template = settingsRef.current.promptTemplate;
-              if (template) {
-                setTimeout(() => {
-                  socketService.sendInput(session.id, template);
-                }, 500);
-              }
-            } else {
-              alert('创建会话失败，请检查后端日志');
-            }
-            setShowAddProject(false);
-          }}
-        />
       )}
       {showSettings && (
         <SettingsModal

@@ -39,10 +39,11 @@ export class SessionManager {
     };
 
     // 使用 node-pty 创建终端
+    // 使用较小的默认尺寸，前端会在初始化后发送实际尺寸
     const ptyProcess = pty.spawn('/bin/zsh', ['-l', '-c', 'claude'], {
       name: 'xterm-256color',
-      cols: 120,
-      rows: 30,
+      cols: 80,
+      rows: 24,
       cwd: projectPath,
       env: process.env as { [key: string]: string }
     });
@@ -235,6 +236,20 @@ export class SessionManager {
 
   getSessionBuffer(sessionId: string): string[] {
     return this.sessions.get(sessionId)?.outputBuffer || [];
+  }
+
+  // 清理所有会话（应用退出时调用）
+  destroyAll(): void {
+    console.log(`Destroying all sessions (${this.ptys.size} total)`);
+    for (const [sessionId, ptyProcess] of this.ptys) {
+      this.clearStatusTimer(sessionId);
+      ptyProcess.kill();
+    }
+    this.sessions.clear();
+    this.ptys.clear();
+    this.lastBusyTime.clear();
+    this.lastTask.clear();
+    this.statusTimers.clear();
   }
 
   updateSummary(sessionId: string, summary: string, title: string): void {

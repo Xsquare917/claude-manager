@@ -7,21 +7,61 @@ import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
   session: Session;
+  initialInput?: string;  // 初始填入的内容（不自动执行）
+  onInitialInputSent?: () => void;  // 初始内容发送后的回调
 }
 
 const darkTheme = {
   background: '#1e1e1e',
   foreground: '#d4d4d4',
   cursor: '#d4d4d4',
+  cursorAccent: '#1e1e1e',
+  selectionBackground: '#264f78',
+  // ANSI 颜色 (标准 16 色)
+  black: '#000000',
+  red: '#cd3131',
+  green: '#0dbc79',
+  yellow: '#e5e510',
+  blue: '#2472c8',
+  magenta: '#bc3fbc',
+  cyan: '#11a8cd',
+  white: '#e5e5e5',
+  brightBlack: '#666666',
+  brightRed: '#f14c4c',
+  brightGreen: '#23d18b',
+  brightYellow: '#f5f543',
+  brightBlue: '#3b8eea',
+  brightMagenta: '#d670d6',
+  brightCyan: '#29b8db',
+  brightWhite: '#ffffff',
 };
 
 const lightTheme = {
   background: '#ffffff',
   foreground: '#1a1a1a',
   cursor: '#1a1a1a',
+  cursorAccent: '#ffffff',
+  selectionBackground: '#add6ff',
+  // ANSI 颜色 - 为浅色背景优化
+  black: '#000000',
+  red: '#c72e2e',
+  green: '#118c4e',
+  yellow: '#9d8500',      // 深黄色，避免太浅
+  blue: '#0451a5',
+  magenta: '#a626a4',
+  cyan: '#0598bc',
+  white: '#555555',       // 白色改为灰色，确保可见
+  brightBlack: '#888888',
+  brightRed: '#e45649',
+  brightGreen: '#50a14f',
+  brightYellow: '#986801', // 深黄色
+  brightBlue: '#4078f2',
+  brightMagenta: '#c678dd',
+  brightCyan: '#0184bc',
+  brightWhite: '#333333',  // 亮白改为深灰，确保可见
 };
 
-export default function Terminal({ session }: TerminalProps) {
+export default function Terminal({ session, initialInput, onInitialInputSent }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -35,6 +75,8 @@ export default function Terminal({ session }: TerminalProps) {
   const pendingOutputRef = useRef<string[]>([]);
   // 标记用户是否在底部（用于智能滚动）
   const isAtBottomRef = useRef<boolean>(true);
+  // 标记初始输入是否已发送
+  const initialInputSentRef = useRef<boolean>(false);
 
   // 监听状态变化
   useEffect(() => {
@@ -57,6 +99,8 @@ export default function Terminal({ session }: TerminalProps) {
     boundSessionIdRef.current = currentSessionId;
     initializedRef.current = false;
     pendingOutputRef.current = [];
+    initialInputSentRef.current = false;
+    isAtBottomRef.current = true;  // 重置滚动状态
 
     const getTheme = () => {
       const theme = document.documentElement.getAttribute('data-theme');
@@ -156,8 +200,33 @@ export default function Terminal({ session }: TerminalProps) {
         // 由于历史已经包含了之前的输出，这里清空缓存即可
         pendingOutputRef.current = [];
 
+        // 滚动到底部，确保光标在输入行
+        xtermRef.current.scrollToBottom();
+
+        // 延迟重新同步终端尺寸到后端，修复光标位置错乱
+        // 等待历史内容渲染完成后，触发 PTY resize 让 CLI 重新绘制当前行
+        setTimeout(() => {
+          if (!mountedRef.current || !xtermRef.current) return;
+          if (boundSessionIdRef.current !== currentSessionId) return;
+
+          const cols = xtermRef.current.cols;
+          const rows = xtermRef.current.rows;
+          socketService.resizeTerminal(currentSessionId, cols, rows);
+        }, 100);
+
         // 聚焦终端
         xtermRef.current.focus();
+
+        // 如果有初始输入且尚未发送，延迟发送（等待 CLI 就绪）
+        if (initialInput && !initialInputSentRef.current) {
+          initialInputSentRef.current = true;
+          setTimeout(() => {
+            if (mountedRef.current && boundSessionIdRef.current === currentSessionId) {
+              socketService.sendInput(currentSessionId, initialInput);
+              onInitialInputSent?.();
+            }
+          }, 800);
+        }
       });
     });
 
@@ -201,6 +270,7 @@ export default function Terminal({ session }: TerminalProps) {
       mountedRef.current = false;
       initializedRef.current = false;
       pendingOutputRef.current = [];
+      isAtBottomRef.current = true;  // 重置滚动状态
       resizeObserver.disconnect();
       themeObserver.disconnect();
       window.removeEventListener('resize', handleSizeChange);

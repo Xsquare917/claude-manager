@@ -1113,7 +1113,7 @@ html, body, #root {
 }
 
 [data-theme="light"] .sidebar {
-  background: var(--bg-secondary);
+  background: #f7f7f7;
   border-right-color: var(--border-color);
 }
 
@@ -1326,6 +1326,10 @@ html, body, #root {
 
 [data-theme="light"] .empty-state h2 {
   color: #333;
+}
+
+[data-theme="light"] .status-content {
+  color: #555;
 }
 
 /* Setup Guide */
