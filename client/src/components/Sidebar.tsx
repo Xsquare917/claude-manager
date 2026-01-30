@@ -80,8 +80,9 @@ export default function Sidebar({
     if (sessions.length === 0) return;
     setIsRefreshing(true);
     onRefreshAllSummaries(sessions.map(s => s.id));
-    // 3秒后恢复按钮状态
-    setTimeout(() => setIsRefreshing(false), 3000);
+    // 根据会话数量动态计算超时时间：每个会话约需 2 秒（含 API 调用和队列延迟）
+    const timeout = Math.max(3000, sessions.length * 2000 + 1000);
+    setTimeout(() => setIsRefreshing(false), timeout);
   };
 
   return (
@@ -97,14 +98,14 @@ export default function Sidebar({
       <div className="sidebar-header">
         <div className="sidebar-title">
           <h1>Claude Manager</h1>
-          <button className="btn-settings" onClick={onOpenSettings} title="设置">
+          <button className="btn-settings" onClick={onOpenSettings} onMouseDown={(e) => e.preventDefault()} title="设置">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
             </svg>
           </button>
         </div>
-        <button className="btn-add" onClick={onAddProject}>
+        <button className="btn-add" onClick={onAddProject} onMouseDown={(e) => e.preventDefault()}>
           + 添加项目
         </button>
       </div>
@@ -118,6 +119,7 @@ export default function Sidebar({
                 <span className="project-name">{projectSessions[0].projectName}</span>
                 <button
                   className="btn-delete-project"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onDeleteProject(projectSessions.map(s => s.id))}
                   title="删除整个项目"
                 >
@@ -136,6 +138,7 @@ export default function Sidebar({
                     {session.unread && <span className="unread-dot" />}
                     <button
                       className="btn-delete"
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={(e) => {
                         e.stopPropagation();
                         onDeleteSession(session.id);
@@ -155,6 +158,7 @@ export default function Sidebar({
         <button
           className="btn-refresh-all"
           onClick={handleRefreshAll}
+          onMouseDown={(e) => e.preventDefault()}  // 阻止焦点转移
           disabled={isRefreshing || sessions.length === 0}
         >
           {isRefreshing ? '刷新中...' : '批量刷新概括'}

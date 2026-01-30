@@ -39,26 +39,27 @@ const darkTheme = {
 const lightTheme = {
   background: '#ffffff',
   foreground: '#1a1a1a',
-  cursor: '#1a1a1a',
+  cursor: '#b48ead',
   cursorAccent: '#ffffff',
   selectionBackground: '#add6ff',
   // ANSI 颜色 - 为浅色背景优化
-  black: '#000000',
+  // 所有颜色都需要在白色背景上清晰可见
+  black: '#4a4a4a',         // 黑色改为中灰，避免太深
   red: '#c72e2e',
   green: '#118c4e',
-  yellow: '#9d8500',      // 深黄色，避免太浅
+  yellow: '#9d8500',        // 深黄色，避免太浅
   blue: '#0451a5',
   magenta: '#a626a4',
   cyan: '#0598bc',
-  white: '#555555',       // 白色改为灰色，确保可见
-  brightBlack: '#888888',
+  white: '#383838',         // 白色改为深灰色（代码块文字常用此颜色）
+  brightBlack: '#5c5c5c',   // 亮黑改为中灰
   brightRed: '#e45649',
   brightGreen: '#50a14f',
-  brightYellow: '#986801', // 深黄色
+  brightYellow: '#986801',  // 深黄色
   brightBlue: '#4078f2',
   brightMagenta: '#c678dd',
   brightCyan: '#0184bc',
-  brightWhite: '#333333',  // 亮白改为深灰，确保可见
+  brightWhite: '#2a2a2a',   // 亮白改为更深的灰色（代码块文字常用此颜色）
 };
 
 export default function Terminal({ session, initialInput, onInitialInputSent }: TerminalProps) {
@@ -203,16 +204,24 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
         // 滚动到底部，确保光标在输入行
         xtermRef.current.scrollToBottom();
 
-        // 延迟重新同步终端尺寸到后端，修复光标位置错乱
-        // 等待历史内容渲染完成后，触发 PTY resize 让 CLI 重新绘制当前行
-        setTimeout(() => {
-          if (!mountedRef.current || !xtermRef.current) return;
-          if (boundSessionIdRef.current !== currentSessionId) return;
+        // 多次延迟 resize 来同步光标位置
+        // 历史记录中可能包含 ANSI 光标定位序列，导致 xterm 光标与 PTY 不同步
+        // 通过多次 resize 触发 PTY 重绘当前行，确保光标位置正确
+        const syncCursorPosition = (delay: number) => {
+          setTimeout(() => {
+            if (!mountedRef.current || !xtermRef.current) return;
+            if (boundSessionIdRef.current !== currentSessionId) return;
 
-          const cols = xtermRef.current.cols;
-          const rows = xtermRef.current.rows;
-          socketService.resizeTerminal(currentSessionId, cols, rows);
-        }, 100);
+            const cols = xtermRef.current.cols;
+            const rows = xtermRef.current.rows;
+            socketService.resizeTerminal(currentSessionId, cols, rows);
+          }, delay);
+        };
+
+        // 分多次 resize，确保 PTY 有足够时间响应并重绘
+        syncCursorPosition(50);
+        syncCursorPosition(150);
+        syncCursorPosition(300);
 
         // 聚焦终端
         xtermRef.current.focus();

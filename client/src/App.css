@@ -374,8 +374,8 @@ html, body, #root {
 }
 
 .floating-status.floating-busy {
-  background: rgba(90, 90, 45, 0.9);
-  color: #dfdf8f;
+  background: rgba(90, 60, 30, 0.9);
+  color: #dfaf6f;
 }
 
 .floating-status.floating-waiting {
@@ -1002,10 +1002,66 @@ html, body, #root {
   font-size: 14px;
 }
 
+.about-version-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .about-value {
   color: #fff;
   font-size: 14px;
   font-weight: 500;
+}
+
+.btn-check-update {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #4a9eff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-check-update:hover:not(:disabled) {
+  background: #3a8eef;
+}
+
+.btn-check-update:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+.update-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.update-result.has-update {
+  background: rgba(74, 158, 255, 0.15);
+  color: #4a9eff;
+}
+
+.update-result.has-update a {
+  color: #4a9eff;
+  text-decoration: underline;
+}
+
+.update-result.up-to-date {
+  background: rgba(13, 188, 121, 0.15);
+  color: #0dbc79;
+}
+
+.update-result.error {
+  background: rgba(205, 49, 49, 0.15);
+  color: #cd3131;
 }
 
 /* Update Modal */
@@ -1165,6 +1221,11 @@ html, body, #root {
   background: #e8e8e8;
 }
 
+[data-theme="light"] .unread-dot {
+  background: #e53935;
+  box-shadow: 0 0 4px rgba(229, 57, 53, 0.5);
+}
+
 [data-theme="light"] .session-name {
   color: #333;
 }
@@ -1279,6 +1340,38 @@ html, body, #root {
 
 [data-theme="light"] .about-value {
   color: #333;
+}
+
+[data-theme="light"] .btn-check-update {
+  background: #0066cc;
+}
+
+[data-theme="light"] .btn-check-update:hover:not(:disabled) {
+  background: #0055aa;
+}
+
+[data-theme="light"] .btn-check-update:disabled {
+  background: #ccc;
+  color: #888;
+}
+
+[data-theme="light"] .update-result.has-update {
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+}
+
+[data-theme="light"] .update-result.has-update a {
+  color: #0066cc;
+}
+
+[data-theme="light"] .update-result.up-to-date {
+  background: rgba(17, 140, 78, 0.1);
+  color: #118c4e;
+}
+
+[data-theme="light"] .update-result.error {
+  background: rgba(199, 46, 46, 0.1);
+  color: #c72e2e;
 }
 
 [data-theme="light"] .version-badge {

@@ -2,7 +2,7 @@ import * as pty from 'node-pty';
 import { v4 as uuidv4 } from 'uuid';
 import { Session } from './types.js';
 
-const MAX_BUFFER_LINES = 1000;
+const MAX_BUFFER_CHUNKS = 5000;  // 增加缓冲区大小，存储更多历史
 const DEBOUNCE_TIME = 1500;
 
 export class SessionManager {
@@ -104,8 +104,8 @@ export class SessionManager {
     if (!session) return;
 
     session.outputBuffer.push(data);
-    if (session.outputBuffer.length > MAX_BUFFER_LINES) {
-      session.outputBuffer = session.outputBuffer.slice(-MAX_BUFFER_LINES);
+    if (session.outputBuffer.length > MAX_BUFFER_CHUNKS) {
+      session.outputBuffer = session.outputBuffer.slice(-MAX_BUFFER_CHUNKS);
     }
 
     session.lastActivity = new Date();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getCurrentVersion } from '../services/versionCheck';
+import { getCurrentVersion, checkForUpdates, type UpdateInfo } from '../services/versionCheck';
 
 export interface AppSettings {
   theme: 'dark' | 'light' | 'system';
@@ -46,6 +46,8 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState(settings.shortcuts);
   const [promptTemplate, setPromptTemplate] = useState(settings.promptTemplate || '');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateInfo | null | 'error'>(null);
 
   const handleThemeChange = (newTheme: 'dark' | 'light' | 'system') => {
     setTheme(newTheme);
@@ -74,6 +76,19 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   const handleSave = () => {
     onSave({ theme, shortcuts, promptTemplate });
     onClose();
+  };
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateResult(null);
+    try {
+      const result = await checkForUpdates();
+      setUpdateResult(result || 'error');
+    } catch {
+      setUpdateResult('error');
+    } finally {
+      setCheckingUpdate(false);
+    }
   };
 
   return (
@@ -151,8 +166,36 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
             <h3>关于</h3>
             <div className="about-info">
               <span className="about-label">当前版本</span>
-              <span className="about-value">v{getCurrentVersion()}</span>
+              <div className="about-version-row">
+                <button
+                  className="btn-check-update"
+                  onClick={handleCheckUpdate}
+                  disabled={checkingUpdate}
+                >
+                  {checkingUpdate ? '检测中...' : '检测更新'}
+                </button>
+                <span className="about-value">v{getCurrentVersion()}</span>
+              </div>
             </div>
+            {updateResult && updateResult !== 'error' && (
+              <div className={`update-result ${updateResult.hasUpdate ? 'has-update' : 'up-to-date'}`}>
+                {updateResult.hasUpdate ? (
+                  <>
+                    <span>发现新版本: v{updateResult.latestVersion}</span>
+                    <a href={updateResult.downloadUrl} target="_blank" rel="noopener noreferrer">
+                      前往下载
+                    </a>
+                  </>
+                ) : (
+                  <span>已是最新版本</span>
+                )}
+              </div>
+            )}
+            {updateResult === 'error' && (
+              <div className="update-result error">
+                <span>检测失败，请稍后重试</span>
+              </div>
+            )}
           </div>
         </div>
 

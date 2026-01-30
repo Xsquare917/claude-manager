@@ -42,7 +42,7 @@ function App() {
   useEffect(() => {
     // 使用版本号判断是否首次启动该版本
     const launchedVersion = localStorage.getItem('cm-setup-version');
-    const isFirstLaunch = launchedVersion !== '1.2.1';
+    const isFirstLaunch = launchedVersion !== '1.2.2';
 
     // 首次启动必须显示引导页
     if (isFirstLaunch) {

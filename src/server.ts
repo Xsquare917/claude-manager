@@ -180,13 +180,16 @@ function createApp() {
     try {
       const buffer = sessionManager.getSessionBuffer(sessionId);
       if (buffer.length === 0) {
+        sessionManager.updateSummary(sessionId, '会话内容为空', '新会话');
         io.emit('summary:updated', { sessionId, summary: '会话内容为空', title: '新会话' });
+        resolve();
       } else {
         const { summary, title } = await generateSummary(buffer);
         // 检查是否是限流错误，需要重试
         if (summary === 'API 限流，请稍后重试' && retries < MAX_RETRIES) {
           console.log(`[Summary] Rate limited, will retry (${retries + 1}/${MAX_RETRIES})`);
           summaryQueue.push({ sessionId, resolve, retries: retries + 1 });
+          // 不调用 resolve()，让 Promise 继续等待重试结果
         } else {
           sessionManager.updateSummary(sessionId, summary, title);
           io.emit('summary:updated', { sessionId, summary, title });
@@ -195,6 +198,7 @@ function createApp() {
       }
     } catch (error) {
       console.error('Summary generation error:', error);
+      sessionManager.updateSummary(sessionId, '概括生成失败', '新会话');
       io.emit('summary:updated', { sessionId, summary: '概括生成失败', title: '新会话' });
       resolve();
     }
