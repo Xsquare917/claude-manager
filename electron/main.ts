@@ -4,6 +4,7 @@ import { dirname, join } from 'path';
 import { createWriteStream } from 'fs';
 import { tmpdir } from 'os';
 import https from 'https';
+import type { IncomingMessage } from 'http';
 import { startServer, cleanupAllSessions } from '../src/server.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -141,7 +142,7 @@ ipcMain.handle('download-and-install', async (_event, url: string) => {
 });
 
 function handleDownload(
-  response: https.IncomingMessage,
+  response: IncomingMessage,
   file: ReturnType<typeof createWriteStream>,
   filePath: string,
   resolve: (value: { success: boolean; path?: string; error?: string }) => void,
