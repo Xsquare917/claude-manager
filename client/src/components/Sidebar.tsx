@@ -37,15 +37,9 @@ function groupByProject(sessions: Session[]) {
   return groups;
 }
 
-// 对项目排序，有未读会话的项目排在前面
+// 对项目排序，保持原有顺序
 function sortedGroupEntries(groups: Record<string, Session[]>) {
-  return Object.entries(groups).sort(([, sessionsA], [, sessionsB]) => {
-    const hasUnreadA = sessionsA.some(s => s.unread);
-    const hasUnreadB = sessionsB.some(s => s.unread);
-    if (hasUnreadA && !hasUnreadB) return -1;
-    if (!hasUnreadA && hasUnreadB) return 1;
-    return 0;
-  });
+  return Object.entries(groups);
 }
 
 function getStatusIcon(status: Session['status']) {

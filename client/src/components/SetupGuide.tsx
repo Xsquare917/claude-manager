@@ -25,7 +25,7 @@ export default function SetupGuide({ onComplete, isExiting = false }: SetupGuide
     const x = ((buttonRect.left + buttonRect.width / 2) / window.innerWidth) * 100;
     const y = ((buttonRect.top + buttonRect.height / 2) / window.innerHeight) * 100;
 
-    localStorage.setItem('cm-setup-version', '1.2.2');
+    localStorage.setItem('cm-setup-version', '1.2.4');
     onComplete(x, y);
   };
 

@@ -87,8 +87,16 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
     if (prevStatus === 'busy' && (currentStatus === 'idle' || currentStatus === 'waiting')) {
       xtermRef.current?.scrollToBottom();
     }
+
+    // 当 CLI 就绪（idle）且有待发送的初始输入时，发送初始输入
+    if (currentStatus === 'idle' && initialInput && !initialInputSentRef.current && initializedRef.current) {
+      initialInputSentRef.current = true;
+      socketService.sendInput(session.id, initialInput);
+      onInitialInputSent?.();
+    }
+
     prevStatusRef.current = currentStatus;
-  }, [session.status]);
+  }, [session.status, session.id, initialInput, onInitialInputSent]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -225,17 +233,6 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
 
         // 聚焦终端
         xtermRef.current.focus();
-
-        // 如果有初始输入且尚未发送，延迟发送（等待 CLI 就绪）
-        if (initialInput && !initialInputSentRef.current) {
-          initialInputSentRef.current = true;
-          setTimeout(() => {
-            if (mountedRef.current && boundSessionIdRef.current === currentSessionId) {
-              socketService.sendInput(currentSessionId, initialInput);
-              onInitialInputSent?.();
-            }
-          }, 800);
-        }
       });
     });
 
@@ -248,6 +245,16 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
         xtermRef.current?.scrollToBottom();
       }
     });
+
+    // 终端获得焦点时触发 resize 同步光标位置
+    const handleFocus = () => {
+      if (!mountedRef.current || !xtermRef.current || !initializedRef.current) return;
+      const cols = xtermRef.current.cols;
+      const rows = xtermRef.current.rows;
+      // 强制发送 resize，即使尺寸没变，也能触发 PTY 重绘当前行
+      socketService.resizeTerminal(currentSessionId, cols, rows);
+    };
+    container.addEventListener('focus', handleFocus, true);
 
     // 监听滚动事件，判断用户是否在底部
     const scrollDisposable = xterm.onScroll(() => {
@@ -282,6 +289,7 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
       isAtBottomRef.current = true;  // 重置滚动状态
       resizeObserver.disconnect();
       themeObserver.disconnect();
+      container.removeEventListener('focus', handleFocus, true);
       window.removeEventListener('resize', handleSizeChange);
       socketService.off('session:output', handleOutput);
       dataDisposable.dispose();

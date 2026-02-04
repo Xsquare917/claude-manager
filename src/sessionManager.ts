@@ -41,7 +41,7 @@ export class SessionManager {
     // 使用 node-pty 创建终端
     // 使用较小的默认尺寸，前端会在初始化后发送实际尺寸
     const ptyProcess = pty.spawn('/bin/zsh', ['-l', '-c', 'claude'], {
-      name: 'xterm-256color',
+      name: 'xterm',  // 使用 16 色模式，确保浅色主题下颜色可被正确映射
       cols: 80,
       rows: 24,
       cwd: projectPath,
