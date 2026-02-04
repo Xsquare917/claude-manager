@@ -1,6 +1,9 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { createWriteStream } from 'fs';
+import { tmpdir } from 'os';
+import https from 'https';
 import { startServer, cleanupAllSessions } from '../src/server.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -110,3 +113,65 @@ app.on('before-quit', () => {
   console.log('App quitting, cleaning up all sessions...');
   cleanupAllSessions();
 });
+
+// 下载并安装更新
+ipcMain.handle('download-and-install', async (_event, url: string) => {
+  return new Promise((resolve, reject) => {
+    const fileName = url.split('/').pop() || 'update.dmg';
+    const filePath = join(tmpdir(), fileName);
+    const file = createWriteStream(filePath);
+
+    const request = https.get(url, { headers: { 'User-Agent': 'Claude-Manager' } }, (response) => {
+      // 处理重定向
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        const redirectUrl = response.headers.location;
+        if (redirectUrl) {
+          file.close();
+          https.get(redirectUrl, { headers: { 'User-Agent': 'Claude-Manager' } }, (res) => {
+            handleDownload(res, file, filePath, resolve, reject);
+          }).on('error', reject);
+          return;
+        }
+      }
+      handleDownload(response, file, filePath, resolve, reject);
+    });
+
+    request.on('error', reject);
+  });
+});
+
+function handleDownload(
+  response: https.IncomingMessage,
+  file: ReturnType<typeof createWriteStream>,
+  filePath: string,
+  resolve: (value: { success: boolean; path?: string; error?: string }) => void,
+  reject: (reason: Error) => void
+) {
+  const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+  let downloadedSize = 0;
+
+  response.on('data', (chunk: Buffer) => {
+    downloadedSize += chunk.length;
+    if (totalSize > 0 && mainWindow) {
+      const progress = Math.round((downloadedSize / totalSize) * 100);
+      mainWindow.webContents.send('download-progress', progress);
+    }
+  });
+
+  response.pipe(file);
+
+  file.on('finish', () => {
+    file.close();
+    // 打开下载的文件（dmg 或 exe）
+    shell.openPath(filePath).then(() => {
+      resolve({ success: true, path: filePath });
+    }).catch((err) => {
+      resolve({ success: false, error: err.message });
+    });
+  });
+
+  file.on('error', (err) => {
+    file.close();
+    reject(err);
+  });
+}

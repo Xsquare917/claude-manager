@@ -21,7 +21,7 @@ export class SessionManager {
     this.onStatusChange = onStatusChange;
   }
 
-  createSession(projectPath: string): Session {
+  createSession(projectPath: string, launchCommand: string = 'claude'): Session {
     const id = uuidv4();
     const projectName = projectPath.split('/').pop() || projectPath;
 
@@ -40,7 +40,7 @@ export class SessionManager {
 
     // 使用 node-pty 创建终端
     // 使用较小的默认尺寸，前端会在初始化后发送实际尺寸
-    const ptyProcess = pty.spawn('/bin/zsh', ['-l', '-c', 'claude'], {
+    const ptyProcess = pty.spawn('/bin/zsh', ['-l', '-c', launchCommand], {
       name: 'xterm',  // 使用 16 色模式，确保浅色主题下颜色可被正确映射
       cols: 80,
       rows: 24,

@@ -1,5 +1,16 @@
 import { useState } from 'react';
-import { getCurrentVersion, checkForUpdates, type UpdateInfo } from '../services/versionCheck';
+import { getCurrentVersion, checkForUpdates, getPlatformAsset, type UpdateInfo } from '../services/versionCheck';
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      platform: string;
+      isElectron: boolean;
+      downloadAndInstall: (url: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+      onDownloadProgress: (callback: (progress: number) => void) => void;
+    };
+  }
+}
 
 export interface AppSettings {
   theme: 'dark' | 'light' | 'system';
@@ -9,6 +20,7 @@ export interface AppSettings {
     nextSession: string;
   };
   promptTemplate: string;
+  launchCommand: string;  // 启动命令，默认 'claude'
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -19,6 +31,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     nextSession: '⌘+↓',
   },
   promptTemplate: '',
+  launchCommand: 'claude',
 };
 
 interface SettingsModalProps {
@@ -46,12 +59,15 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState(settings.shortcuts);
   const [promptTemplate, setPromptTemplate] = useState(settings.promptTemplate || '');
+  const [launchCommand, setLaunchCommand] = useState(settings.launchCommand || 'claude');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateInfo | null | 'error'>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   const handleThemeChange = (newTheme: 'dark' | 'light' | 'system') => {
     setTheme(newTheme);
-    onSave({ ...settings, theme: newTheme, shortcuts, promptTemplate });
+    onSave({ ...settings, theme: newTheme, shortcuts, promptTemplate, launchCommand });
   };
 
   const handleKeyCapture = (e: React.KeyboardEvent, key: keyof typeof shortcuts) => {
@@ -74,7 +90,7 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   };
 
   const handleSave = () => {
-    onSave({ theme, shortcuts, promptTemplate });
+    onSave({ theme, shortcuts, promptTemplate, launchCommand });
     onClose();
   };
 
@@ -88,6 +104,41 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
       setUpdateResult('error');
     } finally {
       setCheckingUpdate(false);
+    }
+  };
+
+  const handleDownloadAndInstall = async () => {
+    if (!updateResult || updateResult === 'error' || !updateResult.assets) return;
+
+    const asset = getPlatformAsset(updateResult.assets);
+    if (!asset) {
+      alert('未找到适合当前平台的安装包');
+      return;
+    }
+
+    if (!window.electronAPI?.downloadAndInstall) {
+      // 非 Electron 环境，直接打开下载链接
+      window.open(asset.browser_download_url, '_blank');
+      return;
+    }
+
+    setDownloading(true);
+    setDownloadProgress(0);
+
+    // 监听下载进度
+    window.electronAPI.onDownloadProgress((progress) => {
+      setDownloadProgress(progress);
+    });
+
+    try {
+      const result = await window.electronAPI.downloadAndInstall(asset.browser_download_url);
+      if (!result.success) {
+        alert('下载失败: ' + (result.error || '未知错误'));
+      }
+    } catch (err) {
+      alert('下载失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -151,6 +202,18 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
           </div>
 
           <div className="settings-section">
+            <h3>启动命令</h3>
+            <p className="settings-hint">创建新会话时执行的命令，可添加参数如 --skip-permissions</p>
+            <input
+              type="text"
+              className="launch-command-input"
+              value={launchCommand}
+              onChange={e => setLaunchCommand(e.target.value)}
+              placeholder="claude"
+            />
+          </div>
+
+          <div className="settings-section">
             <h3>常用指令模板</h3>
             <p className="settings-hint">创建新会话时自动填入此内容（不会自动执行）</p>
             <textarea
@@ -182,9 +245,18 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
                 {updateResult.hasUpdate ? (
                   <>
                     <span>发现新版本: v{updateResult.latestVersion}</span>
-                    <a href={updateResult.downloadUrl} target="_blank" rel="noopener noreferrer">
-                      前往下载
-                    </a>
+                    <div className="update-actions">
+                      {downloading ? (
+                        <span className="download-progress">下载中 {downloadProgress}%</span>
+                      ) : (
+                        <button className="btn-download" onClick={handleDownloadAndInstall}>
+                          下载安装
+                        </button>
+                      )}
+                      <a href={updateResult.downloadUrl} target="_blank" rel="noopener noreferrer">
+                        前往 GitHub
+                      </a>
+                    </div>
                   </>
                 ) : (
                   <span>已是最新版本</span>

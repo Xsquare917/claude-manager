@@ -39,7 +39,7 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  'session:create': (projectPath: string, callback: (session: Session | null) => void) => void;
+  'session:create': (projectPath: string, launchCommand: string, callback: (session: Session | null) => void) => void;
   'session:input': (sessionId: string, data: string) => void;
   'session:resize': (sessionId: string, cols: number, rows: number) => void;
   'session:delete': (sessionId: string) => void;

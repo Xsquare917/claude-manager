@@ -229,9 +229,9 @@ function createApp() {
     });
 
     // Create new session
-    socket.on('session:create', (projectPath, callback) => {
+    socket.on('session:create', (projectPath, launchCommand, callback) => {
       try {
-        const session = sessionManager.createSession(projectPath);
+        const session = sessionManager.createSession(projectPath, launchCommand);
         io.emit('session:created', session);
         callback(session);
       } catch (error) {

@@ -42,7 +42,7 @@ function App() {
   useEffect(() => {
     // 使用版本号判断是否首次启动该版本
     const launchedVersion = localStorage.getItem('cm-setup-version');
-    const isFirstLaunch = launchedVersion !== '1.2.4';
+    const isFirstLaunch = launchedVersion !== '1.2.5';
 
     // 首次启动必须显示引导页
     if (isFirstLaunch) {
@@ -119,7 +119,8 @@ function App() {
       const res = await fetch('/api/pick-folder');
       const data = await res.json();
       if (data.path) {
-        const session = await socketService.createSession(data.path);
+        const launchCmd = settingsRef.current.launchCommand || 'claude';
+        const session = await socketService.createSession(data.path, launchCmd);
         if (session) {
           setActiveSessionId(session.id);
           // 如果有指令模板，标记该会话需要填入模板

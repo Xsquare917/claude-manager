@@ -9,6 +9,13 @@ export interface UpdateInfo {
   releaseNotes: string;
   downloadUrl: string;
   publishedAt: string;
+  assets?: ReleaseAsset[];
+}
+
+export interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+  size: number;
 }
 
 // 版本号比较 (简单实现，支持 x.y.z 格式)
@@ -47,6 +54,13 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
     const latestVersion = data.tag_name.replace(/^v/, '');
     const currentVersion = getCurrentVersion();
 
+    // 解析 assets
+    const assets: ReleaseAsset[] = (data.assets || []).map((a: { name: string; browser_download_url: string; size: number }) => ({
+      name: a.name,
+      browser_download_url: a.browser_download_url,
+      size: a.size,
+    }));
+
     return {
       hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
       currentVersion,
@@ -54,6 +68,7 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
       releaseNotes: data.body || '暂无更新说明',
       downloadUrl: data.html_url,
       publishedAt: data.published_at,
+      assets,
     };
   } catch (error) {
     console.error('Version check failed:', error);
@@ -132,4 +147,29 @@ export async function scheduleUpdateCheck(): Promise<UpdateInfo | null> {
 // 获取 releases 页面 URL
 export function getReleasesUrl(): string {
   return `https://github.com/${GITHUB_REPO}/releases`;
+}
+
+// 获取当前平台对应的安装包
+export function getPlatformAsset(assets: ReleaseAsset[]): ReleaseAsset | null {
+  const platform = navigator.platform.toLowerCase();
+  const isMac = platform.includes('mac');
+  const isWin = platform.includes('win');
+
+  for (const asset of assets) {
+    const name = asset.name.toLowerCase();
+    if (isMac && (name.endsWith('.dmg') || name.includes('darwin') || name.includes('mac'))) {
+      // 优先选择 arm64 版本（Apple Silicon）
+      if (name.includes('arm64')) return asset;
+    }
+    if (isWin && (name.endsWith('.exe') || name.includes('win'))) {
+      return asset;
+    }
+  }
+
+  // 如果没找到 arm64，返回任意 mac 版本
+  if (isMac) {
+    return assets.find(a => a.name.toLowerCase().endsWith('.dmg')) || null;
+  }
+
+  return null;
 }

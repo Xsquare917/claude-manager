@@ -70,9 +70,9 @@ class SocketService {
     this.listeners.get(event)?.delete(callback);
   }
 
-  createSession(projectPath: string): Promise<Session> {
+  createSession(projectPath: string, launchCommand: string = 'claude'): Promise<Session> {
     return new Promise((resolve) => {
-      this.socket.emit('session:create', projectPath, resolve);
+      this.socket.emit('session:create', projectPath, launchCommand, resolve);
     });
   }
 

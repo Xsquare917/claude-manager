@@ -276,12 +276,25 @@ html, body, #root {
 }
 
 .unread-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background: #ff4444;
   border-radius: 50%;
   margin-left: 6px;
   flex-shrink: 0;
+  animation: pulse-blink 2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(255, 68, 68, 0.6);
+}
+
+@keyframes pulse-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
 }
 
 .btn-delete {
@@ -987,6 +1000,28 @@ html, body, #root {
   color: #666;
 }
 
+.launch-command-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #333;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 13px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.launch-command-input:focus {
+  outline: none;
+  border-color: #4a9eff;
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
+
+.launch-command-input::placeholder {
+  color: #666;
+}
+
 /* About Section in Settings */
 .about-info {
   display: flex;
@@ -1062,6 +1097,39 @@ html, body, #root {
 .update-result.error {
   background: rgba(205, 49, 49, 0.15);
   color: #cd3131;
+}
+
+.update-result.has-update {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.btn-download {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #0dbc79;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-download:hover {
+  background: #0aa66a;
+}
+
+.download-progress {
+  font-size: 12px;
+  color: #4a9eff;
 }
 
 /* Update Modal */
@@ -1223,7 +1291,7 @@ html, body, #root {
 
 [data-theme="light"] .unread-dot {
   background: #e53935;
-  box-shadow: 0 0 4px rgba(229, 57, 53, 0.5);
+  box-shadow: 0 0 6px rgba(229, 57, 53, 0.5);
 }
 
 [data-theme="light"] .session-name {
@@ -1330,6 +1398,16 @@ html, body, #root {
   color: #999;
 }
 
+[data-theme="light"] .launch-command-input {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #333;
+}
+
+[data-theme="light"] .launch-command-input::placeholder {
+  color: #999;
+}
+
 [data-theme="light"] .about-info {
   background: #e8e8e8;
 }
@@ -1372,6 +1450,18 @@ html, body, #root {
 [data-theme="light"] .update-result.error {
   background: rgba(199, 46, 46, 0.1);
   color: #c72e2e;
+}
+
+[data-theme="light"] .btn-download {
+  background: #118c4e;
+}
+
+[data-theme="light"] .btn-download:hover {
+  background: #0e7a42;
+}
+
+[data-theme="light"] .download-progress {
+  color: #0066cc;
 }
 
 [data-theme="light"] .version-badge {
