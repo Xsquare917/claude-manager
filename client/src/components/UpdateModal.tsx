@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown';
 import type { UpdateInfo } from '../services/versionCheck';
 import { getReleasesUrl, markVersionShown, clearPendingUpdate } from '../services/versionCheck';
 
@@ -58,8 +59,8 @@ export default function UpdateModal({ updateInfo, onClose }: UpdateModalProps) {
 
           <div className="release-notes">
             <h3>更新内容</h3>
-            <div className="notes-content">
-              {updateInfo.releaseNotes}
+            <div className="notes-content markdown-body">
+              <ReactMarkdown>{updateInfo.releaseNotes}</ReactMarkdown>
             </div>
           </div>
         </div>

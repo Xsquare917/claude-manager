@@ -2,18 +2,20 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { socketService } from './services/socket';
 import type { Session } from './services/socket';
 import Sidebar from './components/Sidebar';
-import Terminal from './components/Terminal';
+import SplitView from './components/SplitView';
 import StatusPanel from './components/StatusPanel';
-import FloatingStatus from './components/FloatingStatus';
 import SettingsModal, { loadSettings, saveSettings } from './components/SettingsModal';
 import type { AppSettings } from './components/SettingsModal';
 import SetupGuide from './components/SetupGuide';
 import UpdateModal from './components/UpdateModal';
+import LaunchCommandModal from './components/LaunchCommandModal';
 import {
   scheduleUpdateCheck,
   getPendingUpdate,
   type UpdateInfo,
 } from './services/versionCheck';
+import type { SplitState, DragState } from './types/split';
+import { createSplitState } from './types/split';
 import './App.css';
 
 function App() {
@@ -30,6 +32,16 @@ function App() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   // 需要填入初始模板的会话ID
   const [pendingTemplateSessionId, setPendingTemplateSessionId] = useState<string | null>(null);
+  // 分屏状态
+  const [splitState, setSplitState] = useState<SplitState | null>(null);
+  const [dragState, setDragState] = useState<DragState>({
+    isDragging: false,
+    sessionId: null,
+    activeZone: null,
+  });
+  // 启动命令选择弹窗
+  const [showLaunchCommandModal, setShowLaunchCommandModal] = useState(false);
+  const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
   // 用 ref 跟踪状态，避免闭包问题
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionsRef = useRef<Session[]>([]);
@@ -113,36 +125,67 @@ function App() {
     saveSettings(newSettings);
   };
 
-  // 直接打开目录选择器并添加项目
+  // 打开目录选择器并显示启动命令选择弹窗
   const handleAddProject = useCallback(async () => {
     try {
       const res = await fetch('/api/pick-folder');
       const data = await res.json();
       if (data.path) {
-        const launchCmd = settingsRef.current.launchCommand || 'claude';
-        const session = await socketService.createSession(data.path, launchCmd);
-        if (session) {
-          setActiveSessionId(session.id);
-          // 如果有指令模板，标记该会话需要填入模板
-          const template = settingsRef.current.promptTemplate;
-          if (template) {
-            setPendingTemplateSessionId(session.id);
-          }
-        } else {
-          alert('创建会话失败，请检查后端日志');
-        }
+        setPendingProjectPath(data.path);
+        setShowLaunchCommandModal(true);
       }
     } catch (error) {
       console.error('Failed to add project:', error);
     }
   }, []);
 
-  // 选择会话时清除未读标记
+  // 选择启动命令后创建会话
+  const handleLaunchCommandSelect = useCallback(async (command: string) => {
+    setShowLaunchCommandModal(false);
+    if (!pendingProjectPath) return;
+
+    try {
+      const session = await socketService.createSession(pendingProjectPath, command);
+      if (session) {
+        setActiveSessionId(session.id);
+        const template = settingsRef.current.promptTemplate;
+        if (template) {
+          setPendingTemplateSessionId(session.id);
+        }
+      } else {
+        alert('创建会话失败，请检查后端日志');
+      }
+    } catch (error) {
+      console.error('Failed to create session:', error);
+    } finally {
+      setPendingProjectPath(null);
+    }
+  }, [pendingProjectPath]);
+
+  // 选择会话时清除未读标记，并更新分屏状态
   const handleSelectSession = useCallback((id: string) => {
     setActiveSessionId(id);
     setSessions(prev => prev.map(s =>
       s.id === id ? { ...s, unread: false } : s
     ));
+    // 更新分屏状态：如果当前没有分屏，创建单面板；如果有分屏，更新焦点面板
+    setSplitState(prev => {
+      if (!prev) {
+        return createSplitState(id);
+      }
+      // 如果选择的会话已在分屏中，切换焦点
+      const idx = prev.sessions.indexOf(id);
+      if (idx !== -1) {
+        return { ...prev, focusedIndex: idx as 0 | 1 };
+      }
+      // 否则替换当前焦点面板
+      if (prev.mode === 'single') {
+        return { ...prev, sessions: [id] };
+      }
+      const newSessions = [...prev.sessions] as [string, string];
+      newSessions[prev.focusedIndex] = id;
+      return { ...prev, sessions: newSessions };
+    });
   }, []);
 
   // 解析快捷键字符串
@@ -258,8 +301,6 @@ function App() {
     };
   }, []);
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
-
   // 加载中
   if (setupComplete === null) {
     return <div className="setup-guide"><div className="setup-container"><p style={{textAlign:'center',color:'#888'}}>加载中...</p></div></div>;
@@ -290,25 +331,29 @@ function App() {
             onAddProject={handleAddProject}
             onDeleteSession={(id) => socketService.deleteSession(id)}
             onDeleteProject={(ids) => ids.forEach(id => socketService.deleteSession(id))}
-            onRefreshAllSummaries={(ids) => ids.forEach(id => socketService.requestSummary(id))}
             onOpenSettings={() => setShowSettings(true)}
             hasUpdate={updateInfo?.hasUpdate}
             onShowUpdate={() => setShowUpdateModal(true)}
+            onDragStart={(sessionId) => setDragState({ isDragging: true, sessionId, activeZone: null })}
+            onDragEnd={() => setDragState({ isDragging: false, sessionId: null, activeZone: null })}
           />
           <main className="main-content">
             <div className="main-titlebar" />
-            {activeSession ? (
+            {splitState ? (
               <>
                 <div className="terminal-wrapper">
-                  <FloatingStatus session={activeSession} />
-                  <Terminal
-                    key={activeSession.id}
-                    session={activeSession}
-                    initialInput={pendingTemplateSessionId === activeSession.id ? settings.promptTemplate : undefined}
+                  <SplitView
+                    splitState={splitState}
+                    sessions={sessions}
+                    onSplitStateChange={setSplitState}
+                    dragState={dragState}
+                    onDragStateChange={setDragState}
+                    pendingTemplateSessionId={pendingTemplateSessionId}
+                    promptTemplate={settings.promptTemplate}
                     onInitialInputSent={() => setPendingTemplateSessionId(null)}
                   />
                 </div>
-                <StatusPanel session={activeSession} />
+                <StatusPanel session={sessions.find(s => s.id === splitState.sessions[splitState.focusedIndex])!} />
               </>
             ) : (
               <div className="empty-state">
@@ -330,6 +375,15 @@ function App() {
         <UpdateModal
           updateInfo={updateInfo}
           onClose={() => setShowUpdateModal(false)}
+        />
+      )}
+      {showLaunchCommandModal && (
+        <LaunchCommandModal
+          onSelect={handleLaunchCommandSelect}
+          onCancel={() => {
+            setShowLaunchCommandModal(false);
+            setPendingProjectPath(null);
+          }}
         />
       )}
       {/* 过渡遮罩层 - 在主界面之上 */}

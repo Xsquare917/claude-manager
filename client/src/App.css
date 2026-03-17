@@ -805,10 +805,15 @@ html, body, #root {
 /* Settings Modal */
 .settings-modal {
   width: 450px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .settings-content {
   padding: 20px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .settings-section {
@@ -1022,6 +1027,29 @@ html, body, #root {
   color: #666;
 }
 
+.launch-command-presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-preset {
+  padding: 6px 14px;
+  background: #333;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-preset:hover {
+  background: #3a3a3a;
+  border-color: #4a9eff;
+  color: #4a9eff;
+}
+
 /* About Section in Settings */
 .about-info {
   display: flex;
@@ -1210,7 +1238,45 @@ html, body, #root {
   line-height: 1.6;
   max-height: 200px;
   overflow-y: auto;
-  white-space: pre-wrap;
+}
+
+.notes-content h1,
+.notes-content h2,
+.notes-content h3 {
+  color: #fff;
+  margin: 12px 0 8px;
+  font-size: 14px;
+}
+
+.notes-content h1:first-child,
+.notes-content h2:first-child,
+.notes-content h3:first-child {
+  margin-top: 0;
+}
+
+.notes-content ul,
+.notes-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.notes-content li {
+  margin: 4px 0;
+}
+
+.notes-content code {
+  background: #444;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.notes-content p {
+  margin: 8px 0;
+}
+
+.notes-content p:first-child {
+  margin-top: 0;
 }
 
 @keyframes pulse {
@@ -1408,6 +1474,18 @@ html, body, #root {
   color: #999;
 }
 
+[data-theme="light"] .btn-preset {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #333;
+}
+
+[data-theme="light"] .btn-preset:hover {
+  background: #e8e8e8;
+  border-color: #4a9eff;
+  color: #4a9eff;
+}
+
 [data-theme="light"] .about-info {
   background: #e8e8e8;
 }
@@ -1482,6 +1560,16 @@ html, body, #root {
 
 [data-theme="light"] .notes-content {
   color: #333;
+}
+
+[data-theme="light"] .notes-content h1,
+[data-theme="light"] .notes-content h2,
+[data-theme="light"] .notes-content h3 {
+  color: #111;
+}
+
+[data-theme="light"] .notes-content code {
+  background: #ddd;
 }
 
 [data-theme="light"] .shortcut-key {
@@ -1794,4 +1882,375 @@ html, body, #root {
 [data-theme="light"] .command-box {
   background: #f5f5f5;
   border-color: #ddd;
+}
+
+/* ========== Split View Styles ========== */
+
+.split-view {
+  position: relative;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.split-view.single {
+  flex-direction: column;
+}
+
+.split-view.horizontal {
+  flex-direction: row;
+}
+
+/* Split Panel */
+.split-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease-out;
+}
+
+.split-view.single .split-panel {
+  flex: 1;
+}
+
+.split-panel.focused {
+  box-shadow: inset 0 0 0 2px #4a9eff, inset 0 0 12px rgba(74, 158, 255, 0.15);
+}
+
+/* Panel close button */
+.panel-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.split-panel:hover .panel-close-btn {
+  opacity: 1;
+}
+
+.panel-close-btn:hover {
+  background: rgba(255, 80, 80, 0.8);
+  color: #fff;
+}
+
+/* Split Divider */
+.split-divider {
+  width: 4px;
+  background: #333;
+  cursor: col-resize;
+  transition: width 0.15s ease-out, background 0.15s ease-out;
+  flex-shrink: 0;
+}
+
+.split-divider:hover,
+.split-divider.dragging {
+  width: 6px;
+  background: #4a9eff;
+}
+
+/* Panel animations */
+.split-panel.animating-in {
+  animation: panelSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.split-panel.animating-out {
+  animation: panelSlideOut 0.25s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes panelSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes panelSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+}
+
+/* ========== Drop Overlay Styles ========== */
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+.drop-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(74, 158, 255, 0.08);
+  border: 2px dashed rgba(74, 158, 255, 0.3);
+  transition: all 0.1s ease-out;
+}
+
+.drop-zone.left {
+  width: 30%;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+}
+
+.drop-zone.center {
+  width: 40%;
+}
+
+.drop-zone.right {
+  width: 30%;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+}
+
+.drop-zone.center-only {
+  width: 100%;
+  border-radius: 8px;
+}
+
+.drop-zone.active {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: rgba(74, 158, 255, 0.6);
+  transform: scale(1.02);
+}
+
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.7;
+  transition: opacity 0.1s;
+}
+
+.drop-zone.active .drop-zone-content {
+  opacity: 1;
+}
+
+.drop-zone-icon {
+  font-size: 32px;
+  color: #4a9eff;
+}
+
+.drop-zone-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4a9eff;
+}
+
+/* ========== Sidebar Drag Styles ========== */
+
+.session-item {
+  cursor: grab;
+}
+
+.session-item:active {
+  cursor: grabbing;
+}
+
+.session-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+/* Light theme overrides */
+[data-theme="light"] .split-divider {
+  background: #ddd;
+}
+
+[data-theme="light"] .split-divider:hover,
+[data-theme="light"] .split-divider.dragging {
+  background: #4a9eff;
+}
+
+[data-theme="light"] .panel-close-btn {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+}
+
+[data-theme="light"] .drop-zone {
+  background: rgba(74, 158, 255, 0.05);
+  border-color: rgba(74, 158, 255, 0.25);
+}
+
+[data-theme="light"] .drop-zone.active {
+  background: rgba(74, 158, 255, 0.15);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+/* ========== Launch Command Modal ========== */
+.launch-command-modal {
+  max-width: 450px;
+}
+
+.launch-command-modal .modal-content {
+  padding: 24px;
+}
+
+.launch-command-modal .modal-hint {
+  color: #999;
+  font-size: 14px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.cli-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.btn-cli {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 2px solid #444;
+  border-radius: 8px;
+  background: #2a2a2a;
+  color: #e0e0e0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cli:hover {
+  background: #333;
+  border-color: #555;
+}
+
+.btn-cli.installed {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.btn-cli.installed:hover {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+}
+
+.btn-cli.not-installed {
+  border-color: #eab308;
+  background: rgba(234, 179, 8, 0.1);
+}
+
+.btn-cli.not-installed:hover {
+  background: rgba(234, 179, 8, 0.2);
+  border-color: #eab308;
+}
+
+.command-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.command-input-section label {
+  font-size: 13px;
+  color: #999;
+  font-weight: 500;
+}
+
+.command-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 14px;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.command-input:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+/* Settings Modal CLI Status */
+.launch-command-presets .btn-preset.installed {
+  border-color: #22c55e !important;
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #22c55e !important;
+}
+
+.launch-command-presets .btn-preset.not-installed {
+  border-color: #eab308 !important;
+  background: rgba(234, 179, 8, 0.15) !important;
+  color: #eab308 !important;
+}
+
+/* Light theme */
+[data-theme="light"] .btn-cli {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #333;
+}
+
+[data-theme="light"] .btn-cli:hover {
+  background: #e8e8e8;
+  border-color: #ccc;
+}
+
+[data-theme="light"] .btn-cli.installed {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+[data-theme="light"] .btn-cli.not-installed {
+  border-color: #eab308;
+  background: rgba(234, 179, 8, 0.1);
+  color: #ca8a04;
+}
+
+[data-theme="light"] .command-input {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #333;
+}
+
+[data-theme="light"] .command-input:focus {
+  border-color: #4a9eff;
+}
+
+[data-theme="light"] .btn-preset.installed {
+  border-color: #22c55e !important;
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #16a34a !important;
+}
+
+[data-theme="light"] .btn-preset.not-installed {
+  border-color: #eab308 !important;
+  background: rgba(234, 179, 8, 0.15) !important;
+  color: #ca8a04 !important;
 }

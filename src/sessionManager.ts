@@ -2,7 +2,7 @@ import * as pty from 'node-pty';
 import { v4 as uuidv4 } from 'uuid';
 import { Session } from './types.js';
 
-const MAX_BUFFER_CHUNKS = 5000;  // 增加缓冲区大小，存储更多历史
+const MAX_BUFFER_CHUNKS = 2500;  // 缓冲区大小，平衡内存占用和历史记录
 const DEBOUNCE_TIME = 1500;
 
 export class SessionManager {
@@ -202,8 +202,22 @@ export class SessionManager {
 
   writeToSession(sessionId: string, data: string): void {
     const ptyProcess = this.ptys.get(sessionId);
+    const session = this.sessions.get(sessionId);
+
     if (ptyProcess) {
       ptyProcess.write(data);
+
+      // 如果是第一次输入且包含回车，提取标题
+      if (session && session.title === '新会话' && data.includes('\r')) {
+        // 移除回车换行等控制字符，提取纯文本
+        const cleanText = data.replace(/[\r\n\x00-\x1f\x7f]/g, '').trim();
+        if (cleanText.length > 0) {
+          // 取前6个字符作为标题
+          const newTitle = cleanText.slice(0, 6);
+          session.title = newTitle;
+          this.onStatusChange(session);
+        }
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getCurrentVersion, checkForUpdates, getPlatformAsset, type UpdateInfo } from '../services/versionCheck';
 
 declare global {
@@ -64,6 +64,25 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   const [updateResult, setUpdateResult] = useState<UpdateInfo | null | 'error'>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [cliStatus, setCliStatus] = useState<Record<string, boolean>>({});
+
+  // 检测 CLI 安装状态
+  useEffect(() => {
+    fetch('/api/check-clis')
+      .then(r => r.json())
+      .then(data => {
+        console.log('CLI Status Data:', data);
+        const status: Record<string, boolean> = {};
+        for (const [cli, info] of Object.entries(data)) {
+          status[cli] = (info as { installed: boolean }).installed;
+        }
+        console.log('Processed Status:', status);
+        setCliStatus(status);
+      })
+      .catch(err => {
+        console.error('Failed to fetch CLI status:', err);
+      });
+  }, []);
 
   const handleThemeChange = (newTheme: 'dark' | 'light' | 'system') => {
     setTheme(newTheme);
@@ -211,6 +230,26 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
               onChange={e => setLaunchCommand(e.target.value)}
               placeholder="claude"
             />
+            <div className="launch-command-presets">
+              <button
+                className={`btn-preset ${cliStatus.claude === true ? 'installed' : cliStatus.claude === false ? 'not-installed' : ''}`}
+                onClick={() => setLaunchCommand('claude')}
+              >
+                Claude
+              </button>
+              <button
+                className={`btn-preset ${cliStatus.codex === true ? 'installed' : cliStatus.codex === false ? 'not-installed' : ''}`}
+                onClick={() => setLaunchCommand('codex')}
+              >
+                Codex
+              </button>
+              <button
+                className={`btn-preset ${cliStatus.gemini === true ? 'installed' : cliStatus.gemini === false ? 'not-installed' : ''}`}
+                onClick={() => setLaunchCommand('gemini')}
+              >
+                Gemini
+              </button>
+            </div>
           </div>
 
           <div className="settings-section">

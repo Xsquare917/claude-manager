@@ -7,7 +7,6 @@ import { readdirSync, statSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { SessionManager } from './sessionManager.js';
-import { generateSummary } from './summarizer.js';
 import type { ServerToClientEvents, ClientToServerEvents } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -151,6 +150,28 @@ function createApp() {
     }
   });
 
+  // API: 检测多个 CLI 工具是否已安装
+  app.get('/api/check-clis', (_req, res) => {
+    const clis = ['claude', 'codex', 'gemini'];
+    const results: Record<string, { installed: boolean; version?: string }> = {};
+
+    for (const cli of clis) {
+      try {
+        const version = execSync(`${cli} --version`, {
+          encoding: 'utf-8',
+          timeout: 5000,
+          env: shellEnv,
+          shell: process.platform === 'darwin' ? '/bin/zsh' : undefined,
+        }).trim();
+        results[cli] = { installed: true, version };
+      } catch {
+        results[cli] = { installed: false };
+      }
+    }
+
+    res.json(results);
+  });
+
   // Session manager instance
   const sessionManager = new SessionManager(
     (sessionId, data) => {
@@ -163,60 +184,6 @@ function createApp() {
 
   // 保存全局引用
   globalSessionManager = sessionManager;
-
-  // 摘要请求队列（避免并发限流）
-  const summaryQueue: Array<{ sessionId: string; resolve: () => void; retries: number }> = [];
-  let isProcessingSummary = false;
-  const MAX_RETRIES = 2;
-  const QUEUE_DELAY = 1500; // 增加到 1.5 秒，避免限流
-
-  async function processSummaryQueue() {
-    if (isProcessingSummary || summaryQueue.length === 0) return;
-
-    isProcessingSummary = true;
-    const item = summaryQueue.shift()!;
-    const { sessionId, resolve, retries } = item;
-
-    try {
-      const buffer = sessionManager.getSessionBuffer(sessionId);
-      if (buffer.length === 0) {
-        sessionManager.updateSummary(sessionId, '会话内容为空', '新会话');
-        io.emit('summary:updated', { sessionId, summary: '会话内容为空', title: '新会话' });
-        resolve();
-      } else {
-        const { summary, title } = await generateSummary(buffer);
-        // 检查是否是限流错误，需要重试
-        if (summary === 'API 限流，请稍后重试' && retries < MAX_RETRIES) {
-          console.log(`[Summary] Rate limited, will retry (${retries + 1}/${MAX_RETRIES})`);
-          summaryQueue.push({ sessionId, resolve, retries: retries + 1 });
-          // 不调用 resolve()，让 Promise 继续等待重试结果
-        } else {
-          sessionManager.updateSummary(sessionId, summary, title);
-          io.emit('summary:updated', { sessionId, summary, title });
-          resolve();
-        }
-      }
-    } catch (error) {
-      console.error('Summary generation error:', error);
-      sessionManager.updateSummary(sessionId, '概括生成失败', '新会话');
-      io.emit('summary:updated', { sessionId, summary: '概括生成失败', title: '新会话' });
-      resolve();
-    }
-
-    isProcessingSummary = false;
-
-    // 处理下一个请求（延迟避免限流）
-    if (summaryQueue.length > 0) {
-      setTimeout(processSummaryQueue, QUEUE_DELAY);
-    }
-  }
-
-  function queueSummaryRequest(sessionId: string): Promise<void> {
-    return new Promise((resolve) => {
-      summaryQueue.push({ sessionId, resolve, retries: 0 });
-      processSummaryQueue();
-    });
-  }
 
   // WebSocket handlers
   io.on('connection', (socket) => {
@@ -260,11 +227,6 @@ function createApp() {
     socket.on('session:getHistory', (sessionId, callback) => {
       const buffer = sessionManager.getSessionBuffer(sessionId);
       callback(buffer.join(''));
-    });
-
-    // Request AI summary (使用队列避免并发限流)
-    socket.on('session:requestSummary', (sessionId) => {
-      queueSummaryRequest(sessionId);
     });
 
     socket.on('disconnect', () => {

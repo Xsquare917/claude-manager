@@ -8,10 +8,11 @@ interface SidebarProps {
   onAddProject: () => void;
   onDeleteSession: (id: string) => void;
   onDeleteProject: (sessionIds: string[]) => void;
-  onRefreshAllSummaries: (sessionIds: string[]) => void;
   onOpenSettings: () => void;
   hasUpdate?: boolean;
   onShowUpdate?: () => void;
+  onDragStart?: (sessionId: string) => void;
+  onDragEnd?: () => void;
 }
 
 // 按项目分组会话，未读的排在前面
@@ -57,27 +58,19 @@ export default function Sidebar({
   onAddProject,
   onDeleteSession,
   onDeleteProject,
-  onRefreshAllSummaries,
   onOpenSettings,
   hasUpdate,
   onShowUpdate,
+  onDragStart,
+  onDragEnd,
 }: SidebarProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const grouped = groupByProject(sessions);
   const sortedGroups = sortedGroupEntries(grouped);
 
   // 获取当前活动会话所属的项目路径
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const activeProjectPath = activeSession?.projectPath || null;
-
-  const handleRefreshAll = () => {
-    if (sessions.length === 0) return;
-    setIsRefreshing(true);
-    onRefreshAllSummaries(sessions.map(s => s.id));
-    // 根据会话数量动态计算超时时间：每个会话约需 2 秒（含 API 调用和队列延迟）
-    const timeout = Math.max(3000, sessions.length * 2000 + 1000);
-    setTimeout(() => setIsRefreshing(false), timeout);
-  };
 
   return (
     <aside className="sidebar">
@@ -124,8 +117,19 @@ export default function Sidebar({
                 {projectSessions.map((session) => (
                   <div
                     key={session.id}
-                    className={`session-item ${session.id === activeSessionId ? 'active' : ''}`}
+                    className={`session-item ${session.id === activeSessionId ? 'active' : ''} ${draggingId === session.id ? 'dragging' : ''}`}
                     onClick={() => onSelectSession(session.id)}
+                    draggable
+                    onDragStart={(e) => {
+                      setDraggingId(session.id);
+                      e.dataTransfer.setData('text/plain', session.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                      onDragStart?.(session.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      onDragEnd?.();
+                    }}
                   >
                     <span className="status-icon">{getStatusIcon(session.status)}</span>
                     <span className="session-name">{session.title || '新会话'}</span>
@@ -146,17 +150,6 @@ export default function Sidebar({
             </div>
           );
         })}
-      </div>
-
-      <div className="sidebar-footer">
-        <button
-          className="btn-refresh-all"
-          onClick={handleRefreshAll}
-          onMouseDown={(e) => e.preventDefault()}  // 阻止焦点转移
-          disabled={isRefreshing || sessions.length === 0}
-        >
-          {isRefreshing ? '刷新中...' : '批量刷新概括'}
-        </button>
       </div>
     </aside>
   );
