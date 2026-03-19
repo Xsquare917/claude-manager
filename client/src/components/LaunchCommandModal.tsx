@@ -1,30 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface LaunchCommandModalProps {
   onSelect: (command: string) => void;
   onCancel: () => void;
+  cliStatus: Record<string, boolean>;
 }
 
-export default function LaunchCommandModal({ onSelect, onCancel }: LaunchCommandModalProps) {
-  const [cliStatus, setCliStatus] = useState<Record<string, boolean>>({});
+export default function LaunchCommandModal({ onSelect, onCancel, cliStatus }: LaunchCommandModalProps) {
   const [command, setCommand] = useState('claude');
-
-  useEffect(() => {
-    fetch('/api/check-clis')
-      .then(r => r.json())
-      .then(data => {
-        console.log('LaunchModal CLI Status:', data);
-        const status: Record<string, boolean> = {};
-        for (const [cli, info] of Object.entries(data)) {
-          status[cli] = (info as { installed: boolean }).installed;
-        }
-        console.log('LaunchModal Processed Status:', status);
-        setCliStatus(status);
-      })
-      .catch(err => {
-        console.error('LaunchModal failed to fetch CLI status:', err);
-      });
-  }, []);
 
   const getButtonClass = (cli: string) => {
     if (cliStatus[cli] === undefined) return 'btn-cli';

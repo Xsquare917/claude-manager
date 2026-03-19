@@ -70,6 +70,7 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
   const mountedRef = useRef<boolean>(true);
   const boundSessionIdRef = useRef<string>(session.id);
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 标记是否已完成初始化（历史加载完成）
   const initializedRef = useRef<boolean>(false);
   // 缓存初始化期间收到的输出
@@ -140,21 +141,28 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
 
-    // 处理尺寸变化
+    // 处理尺寸变化（带防抖）
     const handleSizeChange = () => {
       if (!mountedRef.current || !fitAddonRef.current || !xtermRef.current) return;
 
-      fitAddonRef.current.fit();
-      const cols = xtermRef.current.cols;
-      const rows = xtermRef.current.rows;
+      // 清除之前的定时器
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
 
-      const lastSize = lastSizeRef.current;
-      if (lastSize && lastSize.cols === cols && lastSize.rows === rows) {
-        return;
-      }
+      resizeTimeoutRef.current = setTimeout(() => {
+        if (!mountedRef.current || !fitAddonRef.current || !xtermRef.current) return;
 
-      lastSizeRef.current = { cols, rows };
-      socketService.resizeTerminal(currentSessionId, cols, rows);
+        fitAddonRef.current.fit();
+        const cols = xtermRef.current.cols;
+        const rows = xtermRef.current.rows;
+
+        const lastSize = lastSizeRef.current;
+        if (lastSize && lastSize.cols === cols && lastSize.rows === rows) {
+          return;
+        }
+
+        lastSizeRef.current = { cols, rows };
+        socketService.resizeTerminal(currentSessionId, cols, rows);
+      }, 50);
     };
 
     // 输出处理函数
@@ -183,12 +191,14 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
     });
     resizeObserver.observe(container);
 
-    // 初始化
-    requestAnimationFrame(() => {
+    // 初始化（延迟以确保 DOM 完全渲染）
+    setTimeout(() => {
       if (!mountedRef.current || !fitAddonRef.current || !xtermRef.current) return;
+
       fitAddonRef.current.fit();
       const cols = xtermRef.current.cols;
       const rows = xtermRef.current.rows;
+
       lastSizeRef.current = { cols, rows };
       socketService.resizeTerminal(currentSessionId, cols, rows);
 
@@ -212,29 +222,20 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
         // 滚动到底部，确保光标在输入行
         xtermRef.current.scrollToBottom();
 
-        // 多次延迟 resize 来同步光标位置
-        // 历史记录中可能包含 ANSI 光标定位序列，导致 xterm 光标与 PTY 不同步
-        // 通过多次 resize 触发 PTY 重绘当前行，确保光标位置正确
-        const syncCursorPosition = (delay: number) => {
-          setTimeout(() => {
-            if (!mountedRef.current || !xtermRef.current) return;
-            if (boundSessionIdRef.current !== currentSessionId) return;
+        // 单次延迟 resize 同步光标位置
+        setTimeout(() => {
+          if (!mountedRef.current || !xtermRef.current) return;
+          if (boundSessionIdRef.current !== currentSessionId) return;
 
-            const cols = xtermRef.current.cols;
-            const rows = xtermRef.current.rows;
-            socketService.resizeTerminal(currentSessionId, cols, rows);
-          }, delay);
-        };
-
-        // 分多次 resize，确保 PTY 有足够时间响应并重绘
-        syncCursorPosition(50);
-        syncCursorPosition(150);
-        syncCursorPosition(300);
+          const cols = xtermRef.current.cols;
+          const rows = xtermRef.current.rows;
+          socketService.resizeTerminal(currentSessionId, cols, rows);
+        }, 200);
 
         // 聚焦终端
         xtermRef.current.focus();
       });
-    });
+    }, 100);
 
     // 用户输入
     const dataDisposable = xterm.onData((data) => {
@@ -286,7 +287,12 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
       mountedRef.current = false;
       initializedRef.current = false;
       pendingOutputRef.current = [];
-      isAtBottomRef.current = true;  // 重置滚动状态
+      isAtBottomRef.current = true;
+
+      // 清除定时器
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+
+      // 先移除所有监听器
       resizeObserver.disconnect();
       themeObserver.disconnect();
       container.removeEventListener('focus', handleFocus, true);
@@ -294,9 +300,13 @@ export default function Terminal({ session, initialInput, onInitialInputSent }: 
       socketService.off('session:output', handleOutput);
       dataDisposable.dispose();
       scrollDisposable.dispose();
-      xtermRef.current = null;
+
+      // 最后清理 xterm 实例
+      if (xtermRef.current) {
+        xtermRef.current.dispose();
+        xtermRef.current = null;
+      }
       fitAddonRef.current = null;
-      xterm.dispose();
     };
   }, [session.id]);
 

@@ -55,7 +55,11 @@ export default function SplitView({
       // 延迟更新状态，让动画有时间播放
       requestAnimationFrame(() => {
         onSplitStateChange(newState);
-        setTimeout(() => setAnimatingPanel(null), 300);
+        setTimeout(() => {
+          setAnimatingPanel(null);
+          // 动画结束后触发窗口 resize 事件，让终端重新计算尺寸
+          window.dispatchEvent(new Event('resize'));
+        }, 300);
       });
     }
 
@@ -73,6 +77,8 @@ export default function SplitView({
       onSplitStateChange(newState);
       setIsClosing(false);
       setAnimatingPanel(null);
+      // 动画结束后触发窗口 resize 事件
+      window.dispatchEvent(new Event('resize'));
     }, 250);
   }, [splitState, onSplitStateChange]);
 
@@ -126,11 +132,7 @@ export default function SplitView({
     if (isAnimating && isClosing) panelClass += ' animating-out';
 
     return (
-      <div
-        className={panelClass}
-        style={style}
-        onClick={() => handleFocusPanel(index)}
-      >
+      <div style={{ ...style, position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
         {splitState.mode !== 'single' && (
           <button
             className="panel-close-btn"
@@ -143,12 +145,17 @@ export default function SplitView({
           </button>
         )}
         <FloatingStatus session={session} />
-        <Terminal
-          key={session.id}
-          session={session}
-          initialInput={pendingTemplateSessionId === session.id ? promptTemplate : undefined}
-          onInitialInputSent={onInitialInputSent}
-        />
+        <div
+          className={panelClass}
+          onClick={() => handleFocusPanel(index)}
+        >
+          <Terminal
+            key={session.id}
+            session={session}
+            initialInput={pendingTemplateSessionId === session.id ? promptTemplate : undefined}
+            onInitialInputSent={onInitialInputSent}
+          />
+        </div>
       </div>
     );
   };

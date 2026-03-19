@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { getCurrentVersion, checkForUpdates, getPlatformAsset, type UpdateInfo } from '../services/versionCheck';
 
 declare global {
@@ -38,6 +38,7 @@ interface SettingsModalProps {
   onClose: () => void;
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
+  cliStatus: Record<string, boolean>;
 }
 
 export function loadSettings(): AppSettings {
@@ -54,7 +55,7 @@ export function saveSettings(settings: AppSettings) {
   localStorage.setItem('claude-manager-settings', JSON.stringify(settings));
 }
 
-export default function SettingsModal({ onClose, settings, onSave }: SettingsModalProps) {
+export default function SettingsModal({ onClose, settings, onSave, cliStatus }: SettingsModalProps) {
   const [theme, setTheme] = useState(settings.theme);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState(settings.shortcuts);
@@ -64,25 +65,6 @@ export default function SettingsModal({ onClose, settings, onSave }: SettingsMod
   const [updateResult, setUpdateResult] = useState<UpdateInfo | null | 'error'>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [cliStatus, setCliStatus] = useState<Record<string, boolean>>({});
-
-  // 检测 CLI 安装状态
-  useEffect(() => {
-    fetch('/api/check-clis')
-      .then(r => r.json())
-      .then(data => {
-        console.log('CLI Status Data:', data);
-        const status: Record<string, boolean> = {};
-        for (const [cli, info] of Object.entries(data)) {
-          status[cli] = (info as { installed: boolean }).installed;
-        }
-        console.log('Processed Status:', status);
-        setCliStatus(status);
-      })
-      .catch(err => {
-        console.error('Failed to fetch CLI status:', err);
-      });
-  }, []);
 
   const handleThemeChange = (newTheme: 'dark' | 'light' | 'system') => {
     setTheme(newTheme);

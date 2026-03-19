@@ -3,7 +3,6 @@ import { socketService } from './services/socket';
 import type { Session } from './services/socket';
 import Sidebar from './components/Sidebar';
 import SplitView from './components/SplitView';
-import StatusPanel from './components/StatusPanel';
 import SettingsModal, { loadSettings, saveSettings } from './components/SettingsModal';
 import type { AppSettings } from './components/SettingsModal';
 import SetupGuide from './components/SetupGuide';
@@ -42,6 +41,8 @@ function App() {
   // 启动命令选择弹窗
   const [showLaunchCommandModal, setShowLaunchCommandModal] = useState(false);
   const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
+  // CLI 安装状态缓存
+  const [cliStatus, setCliStatus] = useState<Record<string, boolean>>({});
   // 用 ref 跟踪状态，避免闭包问题
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionsRef = useRef<Session[]>([]);
@@ -66,14 +67,22 @@ function App() {
     Promise.all([
       fetch('/api/check-cli').then(r => r.json()),
       fetch('/api/check-node').then(r => r.json()),
+      fetch('/api/check-clis').then(r => r.json()),
     ])
-      .then(([cli, node]) => {
+      .then(([cli, node, clis]) => {
         const allInstalled = cli.installed && node.installed;
         if (allInstalled) {
           setSetupComplete(true);
         } else {
           setSetupComplete(false);
         }
+
+        // 缓存 CLI 状态
+        const status: Record<string, boolean> = {};
+        for (const [cliName, info] of Object.entries(clis)) {
+          status[cliName] = (info as { installed: boolean }).installed;
+        }
+        setCliStatus(status);
       })
       .catch(() => setSetupComplete(false));
   }, []);
@@ -148,6 +157,19 @@ function App() {
       const session = await socketService.createSession(pendingProjectPath, command);
       if (session) {
         setActiveSessionId(session.id);
+        // 更新分屏状态
+        setSplitState(prev => {
+          if (!prev) {
+            return createSplitState(session.id);
+          }
+          // 替换当前焦点面板
+          if (prev.mode === 'single') {
+            return { ...prev, sessions: [session.id] };
+          }
+          const newSessions = [...prev.sessions] as [string, string];
+          newSessions[prev.focusedIndex] = session.id;
+          return { ...prev, sessions: newSessions };
+        });
         const template = settingsRef.current.promptTemplate;
         if (template) {
           setPendingTemplateSessionId(session.id);
@@ -277,6 +299,25 @@ function App() {
 
     const handleDeleted = (sessionId: string) => {
       setSessions(prev => prev.filter(s => s.id !== sessionId));
+
+      // 更新分屏状态，移除被删除的会话
+      setSplitState(prev => {
+        if (!prev) return null;
+
+        // 如果被删除的会话不在分屏中，不做处理
+        if (!prev.sessions.includes(sessionId)) return prev;
+
+        // 单面板模式：直接清空
+        if (prev.mode === 'single') {
+          return null;
+        }
+
+        // 分屏模式：关闭包含该会话的面板
+        const index = prev.sessions.indexOf(sessionId);
+        const remainingSessionId = prev.sessions[1 - index];
+        return { mode: 'single', sessions: [remainingSessionId], focusedIndex: 0, ratio: 0.5 };
+      });
+
       if (activeSessionIdRef.current === sessionId) {
         setActiveSessionId(null);
       }
@@ -353,7 +394,6 @@ function App() {
                     onInitialInputSent={() => setPendingTemplateSessionId(null)}
                   />
                 </div>
-                <StatusPanel session={sessions.find(s => s.id === splitState.sessions[splitState.focusedIndex])!} />
               </>
             ) : (
               <div className="empty-state">
@@ -369,6 +409,7 @@ function App() {
           settings={settings}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
+          cliStatus={cliStatus}
         />
       )}
       {showUpdateModal && updateInfo && (
@@ -384,6 +425,7 @@ function App() {
             setShowLaunchCommandModal(false);
             setPendingProjectPath(null);
           }}
+          cliStatus={cliStatus}
         />
       )}
       {/* 过渡遮罩层 - 在主界面之上 */}
