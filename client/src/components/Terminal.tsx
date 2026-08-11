@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Terminal as XTerm } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
 import { socketService } from '../services/socket';
-import type { Session, SessionOutput } from '../services/socket';
+import type { Session } from '../services/socket';
+import { terminalRegistry } from '../services/terminalRegistry';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
@@ -11,307 +10,105 @@ interface TerminalProps {
   onInitialInputSent?: () => void;  // 初始内容发送后的回调
 }
 
-const darkTheme = {
-  background: '#1e1e1e',
-  foreground: '#d4d4d4',
-  cursor: '#d4d4d4',
-  cursorAccent: '#1e1e1e',
-  selectionBackground: '#264f78',
-  // ANSI 颜色 (标准 16 色)
-  black: '#000000',
-  red: '#cd3131',
-  green: '#0dbc79',
-  yellow: '#e5e510',
-  blue: '#2472c8',
-  magenta: '#bc3fbc',
-  cyan: '#11a8cd',
-  white: '#e5e5e5',
-  brightBlack: '#666666',
-  brightRed: '#f14c4c',
-  brightGreen: '#23d18b',
-  brightYellow: '#f5f543',
-  brightBlue: '#3b8eea',
-  brightMagenta: '#d670d6',
-  brightCyan: '#29b8db',
-  brightWhite: '#ffffff',
-};
-
-const lightTheme = {
-  background: '#ffffff',
-  foreground: '#1a1a1a',
-  cursor: '#b48ead',
-  cursorAccent: '#ffffff',
-  selectionBackground: '#add6ff',
-  // ANSI 颜色 - 为浅色背景优化
-  // 所有颜色都需要在白色背景上清晰可见
-  black: '#4a4a4a',         // 黑色改为中灰，避免太深
-  red: '#c72e2e',
-  green: '#118c4e',
-  yellow: '#9d8500',        // 深黄色，避免太浅
-  blue: '#0451a5',
-  magenta: '#a626a4',
-  cyan: '#0598bc',
-  white: '#383838',         // 白色改为深灰色（代码块文字常用此颜色）
-  brightBlack: '#5c5c5c',   // 亮黑改为中灰
-  brightRed: '#e45649',
-  brightGreen: '#50a14f',
-  brightYellow: '#986801',  // 深黄色
-  brightBlue: '#4078f2',
-  brightMagenta: '#c678dd',
-  brightCyan: '#0184bc',
-  brightWhite: '#2a2a2a',   // 亮白改为更深的灰色（代码块文字常用此颜色）
-};
-
+// 薄壳组件：xterm 实例由 terminalRegistry 常驻管理（切换会话零重放），
+// 组件只负责挂载/卸载 DOM、尺寸同步和指令模板注入
 export default function Terminal({ session, initialInput, onInitialInputSent }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<XTerm | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
   const prevStatusRef = useRef<string>(session.status);
-  const mountedRef = useRef<boolean>(true);
-  const boundSessionIdRef = useRef<string>(session.id);
-  const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
-  const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 标记是否已完成初始化（历史加载完成）
-  const initializedRef = useRef<boolean>(false);
-  // 缓存初始化期间收到的输出
-  const pendingOutputRef = useRef<string[]>([]);
-  // 标记用户是否在底部（用于智能滚动）
-  const isAtBottomRef = useRef<boolean>(true);
-  // 标记初始输入是否已发送
-  const initialInputSentRef = useRef<boolean>(false);
 
-  // 监听状态变化
+  // 监听状态变化：完成时滚到底部、CLI 就绪时注入指令模板
   useEffect(() => {
+    const entry = terminalRegistry.get(session.id);
     const prevStatus = prevStatusRef.current;
-    const currentStatus = session.status;
+    prevStatusRef.current = session.status;
+    if (!entry) return;
 
-    if (prevStatus === 'busy' && (currentStatus === 'idle' || currentStatus === 'waiting')) {
-      xtermRef.current?.scrollToBottom();
+    if (prevStatus === 'busy' && (session.status === 'idle' || session.status === 'waiting')) {
+      entry.xterm.scrollToBottom();
     }
 
-    // 当 CLI 就绪（idle）且有待发送的初始输入时，发送初始输入
-    if (currentStatus === 'idle' && initialInput && !initialInputSentRef.current && initializedRef.current) {
-      initialInputSentRef.current = true;
+    if (session.status === 'idle' && initialInput && entry.initialized && !entry.initialInputSent) {
+      entry.initialInputSent = true;
       socketService.sendInput(session.id, initialInput);
       onInitialInputSent?.();
     }
-
-    prevStatusRef.current = currentStatus;
   }, [session.status, session.id, initialInput, onInitialInputSent]);
 
   useEffect(() => {
-    if (!terminalRef.current) return;
-
     const container = terminalRef.current;
-    const currentSessionId = session.id;
+    if (!container) return;
 
-    mountedRef.current = true;
-    boundSessionIdRef.current = currentSessionId;
-    initializedRef.current = false;
-    pendingOutputRef.current = [];
-    initialInputSentRef.current = false;
-    isAtBottomRef.current = true;  // 重置滚动状态
+    const sessionId = session.id;
+    let mounted = true;
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const getTheme = () => {
-      const theme = document.documentElement.getAttribute('data-theme');
-      return theme === 'light' ? lightTheme : darkTheme;
-    };
+    const entry = terminalRegistry.attach(sessionId, container);
 
-    const xterm = new XTerm({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: getTheme(),
-    });
-
-    const fitAddon = new FitAddon();
-    xterm.loadAddon(fitAddon);
-    xterm.open(container);
-
-    // 让全局快捷键能够冒泡到 window 处理
-    xterm.attachCustomKeyEventHandler((e) => {
-      const isMod = e.metaKey || e.ctrlKey;
-      // 带修饰键的快捷键让其冒泡到 window
-      if (isMod && (e.shiftKey || ['ArrowUp', 'ArrowDown'].includes(e.key))) {
-        return false;
-      }
-      return true;
-    });
-
-    xtermRef.current = xterm;
-    fitAddonRef.current = fitAddon;
-
-    // 处理尺寸变化（带防抖）
-    const handleSizeChange = () => {
-      if (!mountedRef.current || !fitAddonRef.current || !xtermRef.current) return;
-
-      // 清除之前的定时器
-      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
-
-      resizeTimeoutRef.current = setTimeout(() => {
-        if (!mountedRef.current || !fitAddonRef.current || !xtermRef.current) return;
-
-        fitAddonRef.current.fit();
-        const cols = xtermRef.current.cols;
-        const rows = xtermRef.current.rows;
-
-        const lastSize = lastSizeRef.current;
-        if (lastSize && lastSize.cols === cols && lastSize.rows === rows) {
+    // 尺寸同步（带防抖）
+    const syncSize = () => {
+      if (!mounted) return;
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (!mounted) return;
+        entry.fitAddon.fit();
+        const { cols, rows } = entry.xterm;
+        if (entry.lastSize && entry.lastSize.cols === cols && entry.lastSize.rows === rows) {
           return;
         }
-
-        lastSizeRef.current = { cols, rows };
-        socketService.resizeTerminal(currentSessionId, cols, rows);
+        entry.lastSize = { cols, rows };
+        socketService.resizeTerminal(sessionId, cols, rows);
       }, 50);
     };
 
-    // 输出处理函数
-    const handleOutput = (output: SessionOutput) => {
-      if (!mountedRef.current) return;
-      if (output.sessionId !== currentSessionId) return;
-      if (!xtermRef.current) return;
-
-      // 如果还没初始化完成，缓存输出
-      if (!initializedRef.current) {
-        pendingOutputRef.current.push(output.data);
-        return;
-      }
-
-      xtermRef.current.write(output.data);
-      // 只有当用户本来就在底部时才自动滚动
-      if (isAtBottomRef.current) {
-        xtermRef.current.scrollToBottom();
-      }
-    };
-
-    // ResizeObserver 监听容器尺寸
     const resizeObserver = new ResizeObserver(() => {
-      if (!mountedRef.current) return;
-      requestAnimationFrame(handleSizeChange);
+      if (mounted) requestAnimationFrame(syncSize);
     });
     resizeObserver.observe(container);
+    window.addEventListener('resize', syncSize);
 
     // 初始化（延迟以确保 DOM 完全渲染）
-    setTimeout(() => {
-      if (!mountedRef.current || !fitAddonRef.current || !xtermRef.current) return;
+    const initTimer = setTimeout(() => {
+      if (!mounted) return;
 
-      fitAddonRef.current.fit();
-      const cols = xtermRef.current.cols;
-      const rows = xtermRef.current.rows;
+      entry.fitAddon.fit();
+      entry.lastSize = { cols: entry.xterm.cols, rows: entry.xterm.rows };
+      socketService.resizeTerminal(sessionId, entry.xterm.cols, entry.xterm.rows);
 
-      lastSizeRef.current = { cols, rows };
-      socketService.resizeTerminal(currentSessionId, cols, rows);
-
-      // 加载历史
-      socketService.getSessionHistory(currentSessionId).then((history) => {
-        if (!mountedRef.current || boundSessionIdRef.current !== currentSessionId) return;
-        if (!xtermRef.current) return;
-
-        // 写入历史
-        if (history) {
-          xtermRef.current.write(history);
-        }
-
-        // 标记初始化完成
-        initializedRef.current = true;
-
-        // 写入缓存的输出（只写入历史之后的新内容）
-        // 由于历史已经包含了之前的输出，这里清空缓存即可
-        pendingOutputRef.current = [];
-
-        // 滚动到底部，确保光标在输入行
-        xtermRef.current.scrollToBottom();
-
-        // 单次延迟 resize 同步光标位置
+      // 冷启动路径：首次挂载加载历史；常驻实例重新挂载时直接触发 resize 让 TUI 重绘
+      terminalRegistry.loadHistoryOnce(sessionId, () => {
+        if (!mounted) return;
         setTimeout(() => {
-          if (!mountedRef.current || !xtermRef.current) return;
-          if (boundSessionIdRef.current !== currentSessionId) return;
-
-          const cols = xtermRef.current.cols;
-          const rows = xtermRef.current.rows;
-          socketService.resizeTerminal(currentSessionId, cols, rows);
+          if (!mounted) return;
+          socketService.resizeTerminal(sessionId, entry.xterm.cols, entry.xterm.rows);
         }, 200);
-
-        // 聚焦终端
-        xtermRef.current.focus();
       });
+
+      if (entry.isAtBottom) {
+        entry.xterm.scrollToBottom();
+      }
+      entry.xterm.focus();
     }, 100);
 
-    // 用户输入
-    const dataDisposable = xterm.onData((data) => {
-      if (mountedRef.current) {
-        socketService.sendInput(currentSessionId, data);
-        // 用户输入后滚动到底部
-        isAtBottomRef.current = true;
-        xtermRef.current?.scrollToBottom();
-      }
-    });
-
-    // 终端获得焦点时触发 resize 同步光标位置
+    // 终端获得焦点时触发 resize，让 PTY 重绘当前行同步光标位置
     const handleFocus = () => {
-      if (!mountedRef.current || !xtermRef.current || !initializedRef.current) return;
-      const cols = xtermRef.current.cols;
-      const rows = xtermRef.current.rows;
-      // 强制发送 resize，即使尺寸没变，也能触发 PTY 重绘当前行
-      socketService.resizeTerminal(currentSessionId, cols, rows);
+      if (!mounted || !entry.initialized) return;
+      socketService.resizeTerminal(sessionId, entry.xterm.cols, entry.xterm.rows);
     };
     container.addEventListener('focus', handleFocus, true);
 
-    // 监听滚动事件，判断用户是否在底部
-    const scrollDisposable = xterm.onScroll(() => {
-      if (!xtermRef.current) return;
-      const buffer = xtermRef.current.buffer.active;
-      const viewportY = buffer.viewportY;
-      const baseY = buffer.baseY;
-      // 如果 viewportY 等于 baseY，说明在底部
-      isAtBottomRef.current = viewportY >= baseY;
-    });
-
-    // 监听主题变化
-    const themeObserver = new MutationObserver(() => {
-      if (!xtermRef.current) return;
-      xtermRef.current.options.theme = getTheme();
-    });
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    });
-
-    // 窗口 resize
-    window.addEventListener('resize', handleSizeChange);
-
-    // 监听输出
-    socketService.on('session:output', handleOutput);
-
     return () => {
-      mountedRef.current = false;
-      initializedRef.current = false;
-      pendingOutputRef.current = [];
-      isAtBottomRef.current = true;
-
-      // 清除定时器
-      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
-
-      // 先移除所有监听器
+      mounted = false;
+      clearTimeout(initTimer);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
-      themeObserver.disconnect();
+      window.removeEventListener('resize', syncSize);
       container.removeEventListener('focus', handleFocus, true);
-      window.removeEventListener('resize', handleSizeChange);
-      socketService.off('session:output', handleOutput);
-      dataDisposable.dispose();
-      scrollDisposable.dispose();
-
-      // 最后清理 xterm 实例
-      if (xtermRef.current) {
-        xtermRef.current.dispose();
-        xtermRef.current = null;
-      }
-      fitAddonRef.current = null;
+      terminalRegistry.detach(sessionId);
     };
   }, [session.id]);
 
   const handleContainerClick = () => {
-    xtermRef.current?.focus();
+    terminalRegistry.get(session.id)?.xterm.focus();
   };
 
   return <div ref={terminalRef} className="terminal-container" onClick={handleContainerClick} />;

@@ -1,5 +1,9 @@
 import { useState, useRef } from 'react';
 
+// 引导页版本标记：引导内容有实质变化需要老用户重看时手动提升。
+// 单一出处，App.tsx 的首次启动判断引用此常量
+export const SETUP_GUIDE_VERSION = '1.2.5';
+
 interface SetupGuideProps {
   onComplete: (buttonX: number, buttonY: number) => void;
   isExiting?: boolean;
@@ -25,7 +29,7 @@ export default function SetupGuide({ onComplete, isExiting = false }: SetupGuide
     const x = ((buttonRect.left + buttonRect.width / 2) / window.innerWidth) * 100;
     const y = ((buttonRect.top + buttonRect.height / 2) / window.innerHeight) * 100;
 
-    localStorage.setItem('cm-setup-version', '1.2.5');
+    localStorage.setItem('cm-setup-version', SETUP_GUIDE_VERSION);
     onComplete(x, y);
   };
 

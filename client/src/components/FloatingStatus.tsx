@@ -9,6 +9,7 @@ function getStatusIcon(status: Session['status']) {
   switch (status) {
     case 'busy': return '🔄';
     case 'waiting': return '💬';
+    case 'dormant': return '💤';
     default: return '✅';
   }
 }
@@ -17,6 +18,7 @@ function getStatusText(status: Session['status']) {
   switch (status) {
     case 'busy': return '忙碌中';
     case 'waiting': return '等待输入';
+    case 'dormant': return '已休眠';
     default: return '空闲';
   }
 }

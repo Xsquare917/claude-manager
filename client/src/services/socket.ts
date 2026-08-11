@@ -4,12 +4,13 @@ export interface Session {
   id: string;
   projectPath: string;
   projectName: string;
-  status: 'idle' | 'busy' | 'waiting';
+  status: 'idle' | 'busy' | 'waiting' | 'dormant';
   createdAt: Date;
   lastActivity: Date;
   currentTask: string;
-  summary: string;
   title: string;
+  lastMessage: string | null;    // transcript 最后一条消息预览
+  contextTokens: number | null;  // 当前上下文 token 量
   unread: boolean;  // 是否有未读通知（waiting 状态且未点击）
 }
 
@@ -22,6 +23,8 @@ export interface SessionOutput {
 class SocketService {
   private socket: Socket;
   private listeners: Map<string, Set<Function>> = new Map();
+  // 缓存监听注册前早到的会话事件（socket 可能先于 React 挂载完成连接）
+  private earlySessions: Session[] = [];
 
   constructor() {
     // 开发模式使用代理，生产模式使用相对路径
@@ -32,6 +35,10 @@ class SocketService {
 
   private setupListeners() {
     this.socket.on('session:created', (session: Session) => {
+      if (!this.listeners.get('session:created')?.size) {
+        this.earlySessions.push(session);
+        return;
+      }
       this.emit('session:created', session);
     });
 
@@ -45,10 +52,6 @@ class SocketService {
 
     this.socket.on('session:output', (output: SessionOutput) => {
       this.emit('session:output', output);
-    });
-
-    this.socket.on('summary:updated', (data: { sessionId: string; summary: string; title: string }) => {
-      this.emit('summary:updated', data);
     });
   }
 
@@ -64,6 +67,13 @@ class SocketService {
       this.listeners.set(event, new Set());
     }
     this.listeners.get(event)!.add(callback);
+
+    // 补发监听注册前缓存的会话
+    if (event === 'session:created' && this.earlySessions.length > 0) {
+      const buffered = this.earlySessions;
+      this.earlySessions = [];
+      buffered.forEach(session => callback(session));
+    }
   }
 
   off(event: string, callback: Function) {
@@ -88,8 +98,8 @@ class SocketService {
     this.socket.emit('session:delete', sessionId);
   }
 
-  requestSummary(sessionId: string) {
-    this.socket.emit('session:requestSummary', sessionId);
+  wakeSession(sessionId: string) {
+    this.socket.emit('session:wake', sessionId);
   }
 
   getSessionHistory(sessionId: string): Promise<string> {

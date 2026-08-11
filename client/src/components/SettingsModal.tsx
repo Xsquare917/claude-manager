@@ -21,6 +21,7 @@ export interface AppSettings {
   };
   promptTemplate: string;
   launchCommand: string;  // 启动命令，默认 'claude'
+  notifications: boolean; // 会话等待确认/任务完成时弹系统通知
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   promptTemplate: '',
   launchCommand: 'claude',
+  notifications: true,
 };
 
 interface SettingsModalProps {
@@ -61,6 +63,7 @@ export default function SettingsModal({ onClose, settings, onSave, cliStatus }: 
   const [shortcuts, setShortcuts] = useState(settings.shortcuts);
   const [promptTemplate, setPromptTemplate] = useState(settings.promptTemplate || '');
   const [launchCommand, setLaunchCommand] = useState(settings.launchCommand || 'claude');
+  const [notifications, setNotifications] = useState(settings.notifications !== false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateInfo | null | 'error'>(null);
   const [downloading, setDownloading] = useState(false);
@@ -68,7 +71,16 @@ export default function SettingsModal({ onClose, settings, onSave, cliStatus }: 
 
   const handleThemeChange = (newTheme: 'dark' | 'light' | 'system') => {
     setTheme(newTheme);
-    onSave({ ...settings, theme: newTheme, shortcuts, promptTemplate, launchCommand });
+    onSave({ ...settings, theme: newTheme, shortcuts, promptTemplate, launchCommand, notifications });
+  };
+
+  const handleNotificationsToggle = () => {
+    const next = !notifications;
+    setNotifications(next);
+    // 开启时申请系统通知权限（Electron 默认已授权，浏览器模式会弹询问）
+    if (next && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
   };
 
   const handleKeyCapture = (e: React.KeyboardEvent, key: keyof typeof shortcuts) => {
@@ -91,7 +103,7 @@ export default function SettingsModal({ onClose, settings, onSave, cliStatus }: 
   };
 
   const handleSave = () => {
-    onSave({ theme, shortcuts, promptTemplate, launchCommand });
+    onSave({ theme, shortcuts, promptTemplate, launchCommand, notifications });
     onClose();
   };
 
@@ -178,6 +190,19 @@ export default function SettingsModal({ onClose, settings, onSave, cliStatus }: 
                 跟随系统
               </button>
             </div>
+          </div>
+
+          <div className="settings-section">
+            <h3>系统通知</h3>
+            <p className="settings-hint">会话等待确认或任务完成时弹出系统通知，点击可跳转到对应会话</p>
+            <label className="notification-toggle">
+              <input
+                type="checkbox"
+                checked={notifications}
+                onChange={handleNotificationsToggle}
+              />
+              <span>启用通知</span>
+            </label>
           </div>
 
           <div className="settings-section">

@@ -16,8 +16,6 @@ jobs:
         include:
           - os: macos-latest
             platform: mac
-          - os: windows-latest
-            platform: win
 
     runs-on: ${{ matrix.os }}
 
@@ -50,12 +48,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pack for Windows
-        if: matrix.platform == 'win'
-        run: npm run dist:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Upload macOS artifacts
         if: matrix.platform == 'mac'
         uses: actions/upload-artifact@v4
@@ -64,15 +56,6 @@ jobs:
           path: |
             release/*.dmg
             release/*.dmg.blockmap
-
-      - name: Upload Windows artifacts
-        if: matrix.platform == 'win'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-win
-          path: |
-            release/*.exe
-            release/*.exe.blockmap
 
   release:
     needs: build
@@ -90,7 +73,6 @@ jobs:
         with:
           files: |
             artifacts/**/*.dmg
-            artifacts/**/*.exe
           draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

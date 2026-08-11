@@ -43,6 +43,14 @@ export default function SplitView({
 
     const newSessionId = dragState.sessionId;
 
+    // 同一会话只能出现在一个面板：已在分屏中则只切换焦点
+    const existingIndex = splitState.sessions.indexOf(newSessionId);
+    if (existingIndex !== -1) {
+      onSplitStateChange({ ...splitState, focusedIndex: existingIndex as 0 | 1 });
+      onDragStateChange({ isDragging: false, sessionId: null, activeZone: null });
+      return;
+    }
+
     if (zone === 'center') {
       // 替换当前焦点面板
       const newState = replaceSession(splitState, splitState.focusedIndex, newSessionId);

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { socketService } from './services/socket';
 import type { Session } from './services/socket';
+import { terminalRegistry } from './services/terminalRegistry';
 import Sidebar from './components/Sidebar';
 import SplitView from './components/SplitView';
 import SettingsModal, { loadSettings, saveSettings } from './components/SettingsModal';
 import type { AppSettings } from './components/SettingsModal';
-import SetupGuide from './components/SetupGuide';
+import SetupGuide, { SETUP_GUIDE_VERSION } from './components/SetupGuide';
 import UpdateModal from './components/UpdateModal';
 import LaunchCommandModal from './components/LaunchCommandModal';
 import {
@@ -47,15 +48,18 @@ function App() {
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionsRef = useRef<Session[]>([]);
   const settingsRef = useRef<AppSettings>(settings);
+  const splitStateRef = useRef<SplitState | null>(null);
+  const lastNotifyRef = useRef<Map<string, number>>(new Map());
   activeSessionIdRef.current = activeSessionId;
   sessionsRef.current = sessions;
   settingsRef.current = settings;
+  splitStateRef.current = splitState;
 
   // 启动时检测 CLI 是否已安装
   useEffect(() => {
     // 使用版本号判断是否首次启动该版本
     const launchedVersion = localStorage.getItem('cm-setup-version');
-    const isFirstLaunch = launchedVersion !== '1.2.5';
+    const isFirstLaunch = launchedVersion !== SETUP_GUIDE_VERSION;
 
     // 首次启动必须显示引导页
     if (isFirstLaunch) {
@@ -129,6 +133,13 @@ function App() {
     });
   }, []);
 
+  // 启用通知时申请系统权限（Electron 默认已授权，浏览器模式弹询问）
+  useEffect(() => {
+    if (settings.notifications && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, [settings.notifications]);
+
   const handleSaveSettings = (newSettings: AppSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
@@ -146,6 +157,12 @@ function App() {
     } catch (error) {
       console.error('Failed to add project:', error);
     }
+  }, []);
+
+  // 给已有项目新建会话：跳过目录选择，直接选启动命令
+  const handleAddSessionToProject = useCallback((projectPath: string) => {
+    setPendingProjectPath(projectPath);
+    setShowLaunchCommandModal(true);
   }, []);
 
   // 选择启动命令后创建会话
@@ -184,8 +201,12 @@ function App() {
     }
   }, [pendingProjectPath]);
 
-  // 选择会话时清除未读标记，并更新分屏状态
+  // 选择会话时清除未读标记，休眠会话先唤醒，并更新分屏状态
   const handleSelectSession = useCallback((id: string) => {
+    const target = sessionsRef.current.find(s => s.id === id);
+    if (target?.status === 'dormant') {
+      socketService.wakeSession(id);
+    }
     setActiveSessionId(id);
     setSessions(prev => prev.map(s =>
       s.id === id ? { ...s, unread: false } : s
@@ -227,10 +248,11 @@ function App() {
     const keyMatch = s.key === '↑' ? e.key === 'ArrowUp' :
                      s.key === '↓' ? e.key === 'ArrowDown' :
                      e.key.toUpperCase() === s.key;
-    return (s.meta ? e.metaKey : true) &&
-           (s.ctrl ? e.ctrlKey : true) &&
-           (s.shift ? e.shiftKey : !e.shiftKey || s.shift) &&
-           (s.alt ? e.altKey : true) &&
+    // 修饰键必须精确匹配，避免不含修饰键的快捷键吞掉带修饰键的组合
+    return e.metaKey === s.meta &&
+           e.ctrlKey === s.ctrl &&
+           e.shiftKey === s.shift &&
+           e.altKey === s.alt &&
            keyMatch;
   };
 
@@ -284,7 +306,42 @@ function App() {
       });
     };
 
+    // 状态转变时按需弹系统通知（等待确认 / 任务完成）
+    const notifyOnTransition = (prevStatus: Session['status'] | undefined, session: Session) => {
+      if (!settingsRef.current.notifications) return;
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      if (!prevStatus || prevStatus === session.status) return;
+
+      let kind: 'waiting' | 'done' | null = null;
+      if (session.status === 'waiting') kind = 'waiting';
+      else if (prevStatus === 'busy' && session.status === 'idle') kind = 'done';
+      if (!kind) return;
+
+      // 窗口聚焦且该会话就显示在当前分屏里时不打扰
+      const visible = splitStateRef.current?.sessions.includes(session.id) ?? false;
+      if (document.hasFocus() && visible) return;
+
+      // 每会话 30 秒冷却，防 Claude 空闲提醒重复触发
+      const now = Date.now();
+      if (now - (lastNotifyRef.current.get(session.id) || 0) < 30000) return;
+      lastNotifyRef.current.set(session.id, now);
+
+      const notification = new Notification(
+        `${session.title || '会话'} · ${kind === 'waiting' ? '等待确认' : '任务完成'}`,
+        {
+          body: session.lastMessage || session.projectName,
+          tag: session.id, // 同会话的新通知替换旧通知
+        }
+      );
+      notification.onclick = () => {
+        window.focus();
+        handleSelectSession(session.id);
+        notification.close();
+      };
+    };
+
     const handleUpdated = (session: Session) => {
+      notifyOnTransition(sessionsRef.current.find(s => s.id === session.id)?.status, session);
       setSessions(prev => prev.map(s => {
         if (s.id !== session.id) return s;
 
@@ -298,6 +355,7 @@ function App() {
     };
 
     const handleDeleted = (sessionId: string) => {
+      terminalRegistry.dispose(sessionId);
       setSessions(prev => prev.filter(s => s.id !== sessionId));
 
       // 更新分屏状态，移除被删除的会话
@@ -323,24 +381,16 @@ function App() {
       }
     };
 
-    const handleSummary = (data: { sessionId: string; summary: string; title: string }) => {
-      setSessions(prev => prev.map(s =>
-        s.id === data.sessionId ? { ...s, summary: data.summary, title: data.title } : s
-      ));
-    };
-
     socketService.on('session:created', handleCreated);
     socketService.on('session:updated', handleUpdated);
     socketService.on('session:deleted', handleDeleted);
-    socketService.on('summary:updated', handleSummary);
 
     return () => {
       socketService.off('session:created', handleCreated);
       socketService.off('session:updated', handleUpdated);
       socketService.off('session:deleted', handleDeleted);
-      socketService.off('summary:updated', handleSummary);
     };
-  }, []);
+  }, [handleSelectSession]);
 
   // 加载中
   if (setupComplete === null) {
@@ -370,6 +420,7 @@ function App() {
             activeSessionId={activeSessionId}
             onSelectSession={handleSelectSession}
             onAddProject={handleAddProject}
+            onAddSession={handleAddSessionToProject}
             onDeleteSession={(id) => socketService.deleteSession(id)}
             onDeleteProject={(ids) => ids.forEach(id => socketService.deleteSession(id))}
             onOpenSettings={() => setShowSettings(true)}

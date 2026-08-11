@@ -6,6 +6,7 @@ interface SidebarProps {
   activeSessionId: string | null;
   onSelectSession: (id: string) => void;
   onAddProject: () => void;
+  onAddSession: (projectPath: string) => void;
   onDeleteSession: (id: string) => void;
   onDeleteProject: (sessionIds: string[]) => void;
   onOpenSettings: () => void;
@@ -47,8 +48,14 @@ function getStatusIcon(status: Session['status']) {
   switch (status) {
     case 'busy': return '🔄';
     case 'waiting': return '💬';
+    case 'dormant': return '💤';
     default: return '✅';
   }
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+  return String(tokens);
 }
 
 export default function Sidebar({
@@ -56,6 +63,7 @@ export default function Sidebar({
   activeSessionId,
   onSelectSession,
   onAddProject,
+  onAddSession,
   onDeleteSession,
   onDeleteProject,
   onOpenSettings,
@@ -105,6 +113,14 @@ export default function Sidebar({
               <div className="project-header">
                 <span className="project-name">{projectSessions[0].projectName}</span>
                 <button
+                  className="btn-add-session"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onAddSession(projectPath)}
+                  title="新建会话"
+                >
+                  +
+                </button>
+                <button
                   className="btn-delete-project"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onDeleteProject(projectSessions.map(s => s.id))}
@@ -131,19 +147,29 @@ export default function Sidebar({
                       onDragEnd?.();
                     }}
                   >
-                    <span className="status-icon">{getStatusIcon(session.status)}</span>
-                    <span className="session-name">{session.title || '新会话'}</span>
-                    {session.unread && <span className="unread-dot" />}
-                    <button
-                      className="btn-delete"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteSession(session.id);
-                      }}
-                    >
-                      ×
-                    </button>
+                    <div className="session-main">
+                      <span className="status-icon">{getStatusIcon(session.status)}</span>
+                      <span className="session-name">{session.title || '新会话'}</span>
+                      {session.unread && <span className="unread-dot" />}
+                      <button
+                        className="btn-delete"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteSession(session.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {(session.lastMessage || session.contextTokens) && (
+                      <div className="session-preview">
+                        <span className="preview-text">{session.lastMessage || ''}</span>
+                        {session.contextTokens ? (
+                          <span className="preview-tokens">{formatTokens(session.contextTokens)}</span>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

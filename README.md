@@ -27,12 +27,11 @@
 - **Multi-Project Management** - Add, remove, and switch between different Git projects
 - **Multi-Session Support** - Create multiple Claude Code terminal sessions per project
 - **Real-time Terminal** - Full terminal interaction powered by xterm.js
-- **AI Status Summary**
-  - **Current Task** (Auto-refresh): Real-time detection of what Claude is doing
-  - **Conversation Summary** (Manual): Generate summaries of current session content
+- **Real-time Status Detection** - Automatically detects busy/waiting/idle states and current task
+- **Session Persistence** - Sessions are restored on restart, resuming conversations via `claude --resume`
 - **Auto Update Check** - Automatically checks for new versions every 24 hours
 - **Prompt Template** - Set default prompts that auto-fill when creating new sessions
-- **Theme Switching** - Dark/Light theme with smooth toggle animation
+- **Theme Switching** - Dark/Light theme with smooth toggle animation (terminal area stays dark to preserve CLI color schemes)
 - **Smart Scrolling** - Terminal only auto-scrolls when you're at the bottom
 
 ## Screenshots
@@ -103,7 +102,6 @@ npm run dev
 | Terminal | xterm.js |
 | Backend | Express + Socket.IO |
 | Process | node-pty |
-| AI | Anthropic SDK |
 | Desktop | Electron |
 
 ## License
